@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from schemas.posts import NewRawPost
 from supabase import Client
-from dependencies import validate_token, get_db
+from app.dependencies import validate_token, get_db
 
 router = APIRouter(prefix="/raw-posts", tags=["Raw Posts"])
-
-
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

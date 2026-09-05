@@ -1,6 +1,6 @@
 from supabase import create_client, Client
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY
-from settings import logger
+from config.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY
+from config.settings import logger
 
 
 try:

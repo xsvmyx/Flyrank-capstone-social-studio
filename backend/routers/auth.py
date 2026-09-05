@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 import httpx
-from config import SUPABASE_URL, SUPABASE_ANON_KEY
+from config.config import SUPABASE_URL, SUPABASE_ANON_KEY
 from schemas.login import LoginCredentials
 from schemas.register import RegisterCredentials
-from dependencies import validate_token
+from app.dependencies import validate_token
 
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
