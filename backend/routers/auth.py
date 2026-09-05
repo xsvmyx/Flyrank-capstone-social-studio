@@ -1,16 +1,13 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 import httpx
-import os
+from config import SUPABASE_URL, SUPABASE_ANON_KEY
 from schemas.login import LoginCredentials
 from schemas.register import RegisterCredentials
+from dependencies import validate_token
+
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    raise RuntimeError("auth.py: Missing Supabase Variables")
 
 
 
@@ -83,3 +80,23 @@ async def login(credentials: LoginCredentials):
             "token_type": "bearer",
             "user": data.get("user")
         }
+
+
+
+
+@router.get("/me")
+async def get_current_user_profile(
+    current_user = Depends(validate_token)
+):
+    """
+    Endpoint protégé qui confirme la connexion de l'utilisateur
+    et retourne son identifiant ainsi qu'un message de bienvenue.
+    """
+    user_email = getattr(current_user, "email", "Utilisateur")
+    
+    return {
+        "message": f"Bienvenue {user_email} ! Tu es correctement authentifié.",
+        "user_id": current_user.id,
+        "email": user_email,
+        "status": "authenticated"
+    }
