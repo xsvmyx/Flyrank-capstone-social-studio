@@ -1,9 +1,10 @@
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import auth
+from routers import auth, posts
 
 app = FastAPI(
     title="Social Media Studio",
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(posts.router)
 
 
 @app.get("/")
