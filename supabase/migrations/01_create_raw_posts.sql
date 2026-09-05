@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS public.raw_posts (
     title TEXT NOT NULL,
     raw_content TEXT NOT NULL, 
     image_url TEXT,
-    status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'processing', 'scheduled', 'published', 'failed')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

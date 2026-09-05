@@ -1,0 +1,1 @@
+delete from public.raw_posts;
