@@ -23,9 +23,6 @@ async def upload_image_endpoint(
 async def list_user_uploads_endpoint(
     user=Depends(validate_token)
 ):
-    """
-    Renseigne les fichiers en appliquant strictement les politiques RLS via get_db.
-    """
     user_id = user["user"].id if isinstance(user, dict) else user.id
     
     upload_service = UploadService()
