@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from schemas.posts import NewRawPost
+from schemas.posts_schemas import NewRawPost
 from supabase import Client
 from app.dependencies import validate_token, get_db
 
@@ -17,7 +17,7 @@ async def create_raw_post(
             "title": post_data.title,
             "raw_content": post_data.raw_content,
             "image_url": post_data.image_url,
-            "user_id": current_user.id,
+            "user_id": current_user["user"].id,
         }
 
         

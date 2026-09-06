@@ -26,7 +26,11 @@ def validate_token(
                 status_code=401,
                 detail="Invalid access token",
             )
-        return response.user
+        
+        return {
+            "user": response.user,
+            "token": token
+        }
 
     except HTTPException:
         raise
@@ -40,7 +44,7 @@ def validate_token(
 def get_db(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> Client:
-    """Injecte la session client Supabase scopée au JWT utilisateur pour la RLS native."""
+    """Inject a user-scoped Supabase client based on the provided JWT access token."""
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=401, detail="Access token required")
 

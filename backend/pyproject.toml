@@ -9,6 +9,7 @@ dependencies = [
     "groq>=1.7.0",
     "httpx>=0.28.1",
     "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
     "supabase>=2.31.0",
     "uvicorn>=0.52.4",
 ]

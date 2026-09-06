@@ -78,6 +78,7 @@ if __name__ == "__main__":
 
 
 #TO DO LIST :
+# url scraping service
 # DATABASE SERVICE FOR CLEANER USE
 # MORE GROQ AGENTS
 # Image resizing service
