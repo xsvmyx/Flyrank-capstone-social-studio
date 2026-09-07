@@ -1,0 +1,1 @@
+SELECT pgmq.delete('raw_posts_jobs', 1);

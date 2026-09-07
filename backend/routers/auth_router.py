@@ -96,7 +96,7 @@ async def get_current_user_profile(
     
     return {
         "message": f"Bienvenue {user_email} ! Tu es correctement authentifié.",
-        "user_id": current_user.id,
+        "user_id": current_user["user"].id,
         "email": user_email,
         "status": "authenticated"
     }
