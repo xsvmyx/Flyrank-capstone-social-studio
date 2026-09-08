@@ -1,0 +1,3 @@
+
+class VariantRepository:
+    pass

@@ -1,12 +1,13 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client
-from app.database import get_user_db_client
-from app.database import supabase_admin
+from config.connections import get_user_db_client,supabase_admin
 from repositories.raw_post_repository import RawPostRepository
 from repositories.storage_repository import StorageRepository
+from repositories.variant_repository import VariantRepository
 from services.upload_service import UploadService
-
+from services.orchestrator import Orchestrator
+from services.llm_service import LLMService
 
 security = HTTPBearer(auto_error=False)
 
@@ -77,3 +78,25 @@ def get_upload_service(
 ) -> UploadService:
     """Instantiates UploadService with its StorageRepository dependency."""
     return UploadService(storage_repo=storage_repo)
+
+
+
+
+
+
+def create_orchestrator() -> Orchestrator:
+    # # 1. Repositories
+    raw_post_repo = RawPostRepository(supabase_client=supabase_admin)
+    # variant_repo = VariantRepository(supabase_client=supabase_admin)
+    # storage_repo = StorageRepository(supabase_client=supabase_admin)
+
+    # # 2. Sub-Services
+    # post_service = PostService(raw_post_repo=raw_post_repo, variant_repo=variant_repo)
+    # media_service = MediaService(storage_repo=storage_repo, image_processor=ImageProcessor())
+    llm_service = LLMService()
+
+    return Orchestrator(
+        raw_post_repo=raw_post_repo,
+        llm_service=llm_service
+
+    )

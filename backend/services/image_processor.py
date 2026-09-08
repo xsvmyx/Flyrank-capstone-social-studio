@@ -3,7 +3,7 @@ import uuid
 from typing import Tuple
 import httpx
 from PIL import Image, ImageOps
-from app.database import supabase_admin
+from config.connections import supabase_admin
 from storage3.utils import StorageException
 from config.settings import logger
 

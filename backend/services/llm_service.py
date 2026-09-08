@@ -1,52 +1,69 @@
+import asyncio
+import importlib
+import pkgutil
+from pathlib import Path
+from typing import List
+
 from config.settings import logger
-from config.config import groq_client, GROQ_MODEL
+from services.agents.base_agent import BaseAgent
+from services.agents.registry import get_registered_agents
+from schemas.variant_schemas import GeneratedVariant
 
 
-class GroqService:
+class LLMService:
+    """
+    LLM orchestration service based on the decorated agents registry (@register_agent).
+    Handles dynamic discovery, instantiation, and parallel execution of LLM agents.
+    """
+
     def __init__(self):
-        self.client = groq_client
-        self.system_prompt = (
-            "You are an expert social media copywriter. "
-            "Repurpose raw post content into high-converting posts for LinkedIn and Twitter."
-        )
+        self._load_agent_modules()
+        self._agents: List[BaseAgent] = self._instantiate_agents()
 
-    async def call_llm(self, payload: dict) -> str:
+    def _load_agent_modules(self) -> None:
         """
-        Handles prompt construction, API execution, and response parsing.
+        Dynamically scans and imports modules inside the agents directory.
+        Importing these files triggers the execution of the @register_agent decorators.
         """
-        
-        post_id = payload.get("post_id") or payload.get("id")
+        agents_dir = Path(__file__).resolve().parent / "agents"
 
-        
-        raw_content = (
-            payload.get("raw_content")
-            or payload.get("content")
-            or payload.get("text")
-            or payload.get("raw_text")
-            or ""
+        for _, module_name, is_pkg in pkgutil.iter_modules([str(agents_dir)]):
+            if not is_pkg and module_name not in ("base_agent", "registry", "schemas"):
+                importlib.import_module(f"services.agents.{module_name}")
+
+    def _instantiate_agents(self) -> List[BaseAgent]:
+        """
+        Retrieves all agent classes registered via the decorator and instantiates them.
+        """
+        agent_classes = get_registered_agents()
+        instances = [agent_cls() for agent_cls in agent_classes]
+
+        logger.info(
+            f"🧩 LLMService initialized with {len(instances)} registered agent(s): "
+            f"{[a.platform_name for a in instances]}"
         )
+        return instances
 
-        if not raw_content:
-            logger.error(f"❌ Empty payload payload structure: {payload}")
-            raise ValueError(f"Payload for post #{post_id} contains no text content.")
+    async def generate_all_variants(self, source_text: str) -> List[GeneratedVariant]:
+        """
+        Executes Groq API requests concurrently for all registered agents.
+        """
+        if not self._agents:
+            logger.warning("⚠️ No agents registered with @register_agent.")
+            return []
 
-        user_prompt = f"Repurpose the following content for LinkedIn:\n\n{raw_content}"
+        logger.info(f"🚀 Triggering Groq generation across {len(self._agents)} agent(s) concurrently...")
 
-        logger.info(f"⏳ Sending request to Groq API for post ID: {post_id}...")
+        # Parallel execution across all loaded agents
+        tasks = [agent.generate_variant(source_text) for agent in self._agents]
+        results: List[GeneratedVariant] = await asyncio.gather(*tasks, return_exceptions=False)
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1024
+        # Log generated content per platform
+        for variant in results:
+            logger.info(
+                f"\n--- [GENERATED VARIANT: {variant.platform.upper()}] ---\n"
+                f"{variant.content}\n"
+                f"-----------------------------------"
             )
-            generated_text = response.choices[0].message.content
-            return generated_text
 
-        except Exception as e:
-            logger.error(f"❌ Groq API call failed for post ID {post_id}: {e}")
-            raise
+        return results

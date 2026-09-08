@@ -1,4 +1,3 @@
-from config.settings import logger
 from typing import List, Optional
 from supabase import Client
 

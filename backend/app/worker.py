@@ -1,10 +1,14 @@
 import asyncio
 from config.settings import logger
-from app.database import supabase_admin
-from config.config import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES , SOCIAL_DIMENSIONS
+from config.connections import supabase_admin
+from config.settings import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES , SOCIAL_DIMENSIONS
+from app.dependencies import create_orchestrator
 
 
 
+# from services.image_processor import ImageProcessor
+
+# processor = ImageProcessor()
 
 # async def process_post_job(payload: dict, image_processor: ImageProcessor):
 #     post_id = payload.get("post_id") or payload.get("id")
@@ -40,24 +44,28 @@ from config.config import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES , SOCIAL_D
 #     logger.info(f"🖼️ Resolved HTTP URL for download: {media_url}")
 
 
-    # processed_images = {}
+#     processed_images = {}
 
-    # for platform, dimensions in SOCIAL_DIMENSIONS.items():
-    #     logger.info(f"⏳ Resizing image for platform '{platform}' ({dimensions})...")
+#     for platform, dimensions in SOCIAL_DIMENSIONS.items():
+#         logger.info(f"⏳ Resizing image for platform '{platform}' ({dimensions})...")
         
-    #     resized_url = await image_processor.resize_and_upload(
-    #         image_url=media_url,  # On passe l'URL HTTP résolue !
-    #         dimensions=dimensions,
-    #         user_id=user_id,
-    #         platform_name=platform
-    #     )
-    #     processed_images[platform] = resized_url
-    #     logger.info(f"✅ Image processed for {platform}: {resized_url}")
+#         resized_url = await image_processor.resize_and_upload(
+#             image_url=media_url,  # On passe l'URL HTTP résolue !
+#             dimensions=dimensions,
+#             user_id=user_id,
+#             platform_name=platform
+#         )
+#         processed_images[platform] = resized_url
+#         logger.info(f"✅ Image processed for {platform}: {resized_url}")
 
-    # return {
-    #     "post_id": post_id,
-    #     "processed_images": processed_images
-    # }
+#     return {
+#         "post_id": post_id,
+#         "processed_images": processed_images
+#     }
+
+
+
+orchestrator = create_orchestrator()
 
 
 async def run_worker():
@@ -85,12 +93,13 @@ async def run_worker():
                 if read_count >= MAX_RETRIES:
                     logger.error(f"❌ Job #{msg_id} exceeded maximum retries ({MAX_RETRIES}). Dropping job...")
                     #in the future we should mark it as the post as failed.
-                    
+
                     supabase_admin.rpc("pgmq_delete", {"queue_name": QUEUE_NAME, "msg_id": msg_id}).execute()
                     continue
 
-                logger.info("⏳processing.....⏳")
-                await asyncio.sleep(2) # orchestrator.execute(job)
+                
+                   
+                await orchestrator.execute_job(payload=payload)
                 
 
 
@@ -111,6 +120,5 @@ if __name__ == "__main__":
 
 #TO DO LIST :
 # url scraping service
-# DATABASE SERVICE FOR CLEANER USE
 # MORE GROQ AGENTS
 # Better orchestration of the worker and the API

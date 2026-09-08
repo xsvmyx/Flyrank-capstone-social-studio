@@ -1,7 +1,7 @@
 from supabase import create_client, Client
-from config.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY
-from config.settings import logger
-
+from config.settings import logger , SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY , GROQ_API_KEY
+from groq import Groq
+from functools import lru_cache
 
 try:
     supabase_admin: Client = create_client(
@@ -28,3 +28,13 @@ def get_user_db_client(access_token: str) -> Client:
     except Exception as e:
         logger.error("Failed to initialize user Supabase client with provided token: %s", e)
         raise RuntimeError(f"Could not create user-scoped database client: {str(e)}") from e
+
+
+
+
+
+
+
+@lru_cache(maxsize=1)
+def get_groq_client() -> Groq:
+    return Groq(api_key=GROQ_API_KEY)

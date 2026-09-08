@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import auth_router, posts_router, upload_router
-from routers import llm
+
 
 app = FastAPI(
     title="Social Media Studio",
@@ -22,7 +22,6 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(posts_router.router)
-app.include_router(llm.router)
 app.include_router(upload_router.router)
 
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 import httpx
-from config.config import SUPABASE_URL, SUPABASE_ANON_KEY
+from config.settings import SUPABASE_URL, SUPABASE_ANON_KEY
 from schemas.login import LoginCredentials
 from schemas.register import RegisterCredentials
 from app.dependencies import validate_token

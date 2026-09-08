@@ -16,6 +16,3 @@ class RawPostResponse(BaseModel):
     image_url: Optional[str] = None
     user_id: str
     created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True

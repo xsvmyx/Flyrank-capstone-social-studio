@@ -1,74 +1,114 @@
-# # app/services/post_pipeline.py
-# from config.settings import logger
-# from typing import Dict, Any, Optional
-# from backend.services.image_processor import ImageProcessor
+from typing import Dict, Any, Optional, List
+from config.settings import logger
+from services.llm_service import LLMService
+from repositories.raw_post_repository import RawPostRepository
+from schemas.posts_schemas import RawPostResponse
+from schemas.variant_schemas import GeneratedVariant
+
+
+class Orchestrator:
+    """
+    Central orchestrator for the post processing pipeline.
+    Connects the PGMQ queue, data access (Repositories),
+    and business services (Image Processing, LLM Agents, Validation).
+    """
+
+    def __init__(
+        self,
+        raw_post_repo: RawPostRepository,
+        llm_service: LLMService,
+    ):
+        self.raw_post_repo = raw_post_repo
+        self.llm_service = llm_service
+
+    async def execute_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Main entry point called by the PGMQ Worker.
+        Orchestrates the complete job processing lifecycle.
+        """
+        post_id = payload.get("post_id")
+        if not post_id:
+            raise ValueError("Payload missing required key 'post_id'")
+
+        
+        source_data = await self._fetch_and_prepare_source(post_id)
+        content = source_data.get("raw_content")
+
+        logger.info(f"⚙️ Executing job for Post ID: {post_id}")
+
+        
+        generated_variants: List[GeneratedVariant] = await self._generate_text_variants(content)
+
+        logger.info(f"✨ Successfully generated {len(generated_variants)} text variant(s).")
+
+        
+        # await self._persist_results(post_id=post_id, variants=generated_variants)
+
+        return {"status": "success", "post_id": post_id}
+
+
+
+    async def _fetch_and_prepare_source(self, post_id: str) -> Dict[str, Any]:
+        """
+        Fetches the source post from the database using RawPostRepository
+        and returns a dictionary payload for the processing pipeline.
+        """
+        logger.info(f"📥 Fetching raw post source for ID: {post_id}")
+        
+        post: Optional[RawPostResponse] = await self.raw_post_repo.get_by_id(post_id)
+        
+        if not post:
+            logger.error(f"❌ Raw post not found for ID: {post_id}")
+            raise ValueError(f"Raw post with ID {post_id} does not exist.")
+
+        return {
+            "post_id": post.id,
+            "title": post.title,
+            "raw_content": post.raw_content,
+            "image_url": post.image_url,
+            "user_id": post.user_id,
+            "created_at": post.created_at.isoformat() if post.created_at else None,
+        }
+
+    async def _generate_text_variants(self, source_text: str) -> List[GeneratedVariant]:
+            """
+            Calls LLMService to generate text variants dynamically across all agents
+            and logs the generated content for each platform.
+            """
+            logger.info("🤖 Triggering text variant generation...")
+            variants = await self.llm_service.generate_all_variants(source_text)
+
+            return variants
 
 
 
 
+    async def _process_media_variants(
+        self,
+        raw_media_path: str,
+        user_id: str
+    ) -> Dict[str, str]:
+        """
+        Handles downloading, multi-platform image resizing,
+        and uploading of image variants.
+        """
+        ...
 
-# class PostPipelineService:
-#     """
-#     Orchestrateur central du pipeline de traitement d'un post.
-#     Fait le lien entre la file PGMQ, l'accès aux données (Repositories)
-#     et les services métier (Image Processing, Agents LLM, Validation).
-#     """
+    async def _validate_constraints(
+        self,
+        text_variants: List[GeneratedVariant]
+    ) -> Dict[str, bool]:
+        """
+        Verifies that each variant complies with required rules (length, hashtags, tone).
+        """
+        ...
 
-#     def __init__(
-#         self,
-#         raw_post_repo: RawPostRepository,
-#         variant_repo: VariantRepository,
-#         image_processor: ImageProcessor,
-#         # TODO: Ajouter plus tard agent_service: AgentService, validator_service: ValidatorService
-#     ) -> None:
-#         self.raw_post_repo = raw_post_repo
-#         self.variant_repo = variant_repo
-#         self.image_processor = image_processor
-
-#     async def execute_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-#         """
-#         Point d'entrée principal appelé par le Worker PGMQ.
-#         Orchestre le cycle de vie complet de traitement d'un job.
-#         """
-#         ...
-
-#     async def _fetch_and_prepare_source(self, post_id: str) -> Dict[str, Any]:
-#         """
-#         Récupère le post source en BDD et résout l'URL du média si nécessaire.
-#         """
-#         ...
-
-#     async def _process_media_variants(
-#         self, 
-#         raw_media_path: str, 
-#         user_id: str
-#     ) -> Dict[str, str]:
-#         """
-#         Règne le téléchargement, le redimensionnement multi-plateforme 
-#         et l'upload des déclinaisons d'images.
-#         """
-#         ...
-
-#     async def _generate_text_variants(self, source_text: str) -> Dict[str, str]:
-#         """
-#         Sous-fonction dédiée à l'appel des agents IA pour générer
-#         les textes adaptés aux contraintes de chaque plateforme.
-#         """
-#         ...
-
-#     async def _validate_constraints(self, text_variants: Dict[str, str]) -> Dict[str, bool]:
-#         """
-#         Vérifie que chaque variant respecte les règles (longueur, hashtags, ton).
-#         """
-#         ...
-
-#     async def _persist_results(
-#         self, 
-#         post_id: str, 
-#         image_variants: Dict[str, str], 
-#         text_variants: Optional[Dict[str, str]] = None
-#     ) -> None:
-#         """
-#         Persiste les variants validés (médias et textes) dans la table public.variants.
-#         """
-#         ...
+    async def _persist_results(
+        self,
+        post_id: str,
+        variants: List[GeneratedVariant]
+    ) -> None:
+        """
+        Persists validated variants into the public.variants table.
+        """
+        ...
