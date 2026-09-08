@@ -85,18 +85,16 @@ def get_upload_service(
 
 
 def create_orchestrator() -> Orchestrator:
-    # # 1. Repositories
+    
     raw_post_repo = RawPostRepository(supabase_client=supabase_admin)
-    # variant_repo = VariantRepository(supabase_client=supabase_admin)
-    # storage_repo = StorageRepository(supabase_client=supabase_admin)
+    variant_repo = VariantRepository(supabase_client=supabase_admin)
 
-    # # 2. Sub-Services
-    # post_service = PostService(raw_post_repo=raw_post_repo, variant_repo=variant_repo)
-    # media_service = MediaService(storage_repo=storage_repo, image_processor=ImageProcessor())
+
     llm_service = LLMService()
 
     return Orchestrator(
         raw_post_repo=raw_post_repo,
-        llm_service=llm_service
+        llm_service=llm_service,
+        variant_repo=variant_repo
 
     )

@@ -4,7 +4,7 @@ from services.llm_service import LLMService
 from repositories.raw_post_repository import RawPostRepository
 from schemas.posts_schemas import RawPostResponse
 from schemas.variant_schemas import GeneratedVariant
-
+from repositories.variant_repository import VariantRepository
 
 class Orchestrator:
     """
@@ -17,9 +17,11 @@ class Orchestrator:
         self,
         raw_post_repo: RawPostRepository,
         llm_service: LLMService,
+        variant_repo: VariantRepository
     ):
         self.raw_post_repo = raw_post_repo
         self.llm_service = llm_service
+        self.variant_repo = variant_repo
 
     async def execute_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -42,7 +44,7 @@ class Orchestrator:
         logger.info(f"✨ Successfully generated {len(generated_variants)} text variant(s).")
 
         
-        # await self._persist_results(post_id=post_id, variants=generated_variants)
+        await self._persist_results(post_id=post_id, variants=generated_variants)
 
         return {"status": "success", "post_id": post_id}
 
@@ -75,7 +77,7 @@ class Orchestrator:
             Calls LLMService to generate text variants dynamically across all agents
             and logs the generated content for each platform.
             """
-            logger.info("🤖 Triggering text variant generation...")
+            # logger.info("🤖 Triggering text variant generation...")
             variants = await self.llm_service.generate_all_variants(source_text)
 
             return variants
@@ -104,11 +106,31 @@ class Orchestrator:
         ...
 
     async def _persist_results(
-        self,
-        post_id: str,
-        variants: List[GeneratedVariant]
-    ) -> None:
-        """
-        Persists validated variants into the public.variants table.
-        """
-        ...
+            self,
+            post_id: str,
+            variants: List[GeneratedVariant]
+        ) -> None:
+            """
+            Persists validated variants into the public.variants table using VariantRepository.
+            Handles empty payload protection and logs insertion status.
+            """
+            if not variants:
+                logger.warning(f"⚠️ No variants generated to persist for Post ID: {post_id}")
+                return
+
+            try:
+                logger.info(f"💾 Persisting {len(variants)} variant(s) for Post ID: {post_id}...")
+                
+                # Execute batch upsert via the repository
+                persisted_variants = await self.variant_repo.create_many(
+                    post_id=post_id, 
+                    variants=variants
+                )
+                
+                logger.info(
+                    f"✅ Successfully persisted {len(persisted_variants)} variant(s) "
+                    f"to database for Post ID: {post_id}"
+                )
+            except Exception as e:
+                logger.error(f"❌ Database error persisting variants for Post ID {post_id}: {e}")
+                raise e
