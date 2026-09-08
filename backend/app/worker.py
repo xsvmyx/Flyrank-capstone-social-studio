@@ -84,6 +84,8 @@ async def run_worker():
    
                 if read_count >= MAX_RETRIES:
                     logger.error(f"❌ Job #{msg_id} exceeded maximum retries ({MAX_RETRIES}). Dropping job...")
+                    #in the future we should mark it as the post as failed.
+                    
                     supabase_admin.rpc("pgmq_delete", {"queue_name": QUEUE_NAME, "msg_id": msg_id}).execute()
                     continue
 

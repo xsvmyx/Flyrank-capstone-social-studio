@@ -4,6 +4,9 @@ from supabase import Client
 from app.database import get_user_db_client
 from app.database import supabase_admin
 from repositories.raw_post_repository import RawPostRepository
+from repositories.storage_repository import StorageRepository
+from services.upload_service import UploadService
+
 
 security = HTTPBearer(auto_error=False)
 
@@ -52,5 +55,25 @@ def get_db(
 
 
 
+############ REPOSITORIES
+
+
+
 def get_raw_post_repository(db: Client = Depends(get_db)) -> RawPostRepository:
     return RawPostRepository(supabase_client=db)
+
+
+def get_storage_repository() -> StorageRepository:
+    """Uses admin client for bypass storage policies if needed."""
+    return StorageRepository(supabase_client=supabase_admin)
+
+
+############# SERVICES
+
+
+
+def get_upload_service(
+    storage_repo: StorageRepository = Depends(get_storage_repository)
+) -> UploadService:
+    """Instantiates UploadService with its StorageRepository dependency."""
+    return UploadService(storage_repo=storage_repo)
