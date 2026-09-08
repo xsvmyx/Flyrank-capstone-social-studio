@@ -5,16 +5,14 @@ CREATE TYPE public.social_platform AS ENUM (
     'facebook'
 );
 
-
 CREATE TYPE public.variant_status AS ENUM (
-    'pending',      
-    'completed',    
-    'failed',       
-    'published'     
+    'pending',
+    'completed',
+    'failed',
+    'published'
 );
 
-
-CREATE TABLE IF NOT EXISTS public.posts (
+CREATE TABLE IF NOT EXISTS public.variants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     post_id UUID NOT NULL REFERENCES public.raw_posts(id) ON DELETE CASCADE,
     platform public.social_platform NOT NULL,
@@ -25,26 +23,24 @@ CREATE TABLE IF NOT EXISTS public.posts (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-
-    CONSTRAINT unique_post_platform UNIQUE (post_id, platform)
+    CONSTRAINT unique_variant_post_platform UNIQUE (post_id, platform)
 );
 
+CREATE INDEX idx_variants_post_id
+    ON public.variants(post_id);
 
-CREATE INDEX idx_posts_post_id ON public.posts(post_id);
-CREATE INDEX idx_posts_platform_status ON public.posts(platform, status);
+CREATE INDEX idx_variants_platform_status
+    ON public.variants(platform, status);
 
-
-CREATE TRIGGER update_posts_modtime
-    BEFORE UPDATE ON public.posts
+CREATE TRIGGER update_variants_modtime
+    BEFORE UPDATE ON public.variants
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+ALTER TABLE public.variants ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.posts ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "Service Role full access on posts"
-    ON public.posts
+CREATE POLICY "Service Role full access on variants"
+    ON public.variants
     FOR ALL
     TO service_role
     USING (true)

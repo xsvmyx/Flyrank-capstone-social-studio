@@ -3,7 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client
 from app.database import get_user_db_client
 from app.database import supabase_admin
-
+from repositories.raw_post_repository import RawPostRepository
 
 security = HTTPBearer(auto_error=False)
 
@@ -49,3 +49,8 @@ def get_db(
         raise HTTPException(status_code=401, detail="Access token required")
 
     return get_user_db_client(credentials.credentials)
+
+
+
+def get_raw_post_repository(db: Client = Depends(get_db)) -> RawPostRepository:
+    return RawPostRepository(supabase_client=db)

@@ -1,7 +1,21 @@
+from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 
-class NewRawPost(BaseModel):
+class RawPostCreate(BaseModel):
     title: str
-    raw_content: str 
-    image_url: str | None = None
+    raw_content: str
+    image_url: Optional[str] = None
+
+
+class RawPostResponse(BaseModel):
+    id: str
+    title: str
+    raw_content: str
+    image_url: Optional[str] = None
+    user_id: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

@@ -24,3 +24,12 @@ if not GROQ_API_KEY:
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
+
+
+
+SOCIAL_DIMENSIONS = {
+    "instagram": (1080, 1080), 
+    "linkedin": (1200, 627),    
+    "twitter": (1200, 675),     
+    "facebook": (1200, 630)     
+}
