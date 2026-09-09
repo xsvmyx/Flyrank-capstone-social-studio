@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-from groq import Groq
+from groq import AsyncGroq
 from config.connections import get_groq_client
 from config.settings import logger
-from schemas.variant_schemas import GeneratedVariant
+from schemas.variant_schemas import GeneratedVariant,SocialPlatform
 from config.settings import GROQ_MODEL
 
 class BaseAgent(ABC):
@@ -16,7 +16,7 @@ class BaseAgent(ABC):
         self,
         platform_name: str,
         model_name: str = GROQ_MODEL,
-        groq_client: Optional[Groq] = None,
+        groq_client: Optional[AsyncGroq] = None,
     ):
         self.platform_name = platform_name
         self.model_name = model_name
@@ -32,36 +32,86 @@ class BaseAgent(ABC):
         pass
 
 
+    @abstractmethod
+    def validate(self, content: str) -> tuple[bool, Optional[str]]:
+        """
+        Retourns (True, None) if valid,
+        or (False, "raison of failure") if invalid.
+        """
+        pass
+
+
+
+
+    MAX_RETRIES = 2  
 
     async def generate_variant(self, source_text: str) -> GeneratedVariant:
         """
-        Executes the LLM completion request using the Groq API client with
-        the platform-specific prompt defined by the child agent.
+        Executes LLM completion request with an automatic retry loop if validation fails.
         """
         logger.info(f"🤖 Generating variant for [{self.platform_name.upper()}] using Groq ({self.model_name})...")
-        
+
         prompt = self.build_prompt(source_text)
+        
+        # Historique de discussion pour permettre le "Recall" avec auto-correction
+        messages = [
+            {
+                "role": "system",
+                "content": f"You are an expert social media manager specialized in {self.platform_name} content creation.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
 
-        # Synchronous API invocation (can be wrapped with asyncio.to_thread if required)
-        chat_completion = self.client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"You are an expert social media manager specialized in {self.platform_name} content creation.",
-                },
-                {
+        attempt = 0
+        raw_response = ""
+        is_valid = False
+        validation_error = None
+
+        while attempt <= self.MAX_RETRIES:
+            attempt += 1
+            if attempt > 1:
+                logger.warning(f"🔄 [RETRY {attempt-1}/{self.MAX_RETRIES}] Re-generating for [{self.platform_name.upper()}] due to validation failure...")
+
+            
+            chat_completion = await self.client.chat.completions.create(
+                messages=messages,
+                model=self.model_name,
+                temperature=0.7,
+            )
+
+            raw_response = chat_completion.choices[0].message.content.strip()
+
+            
+            is_valid, validation_error = self.validate(raw_response)
+
+            if is_valid:
+                logger.info(f"✅ Validation passed for [{self.platform_name.upper()}] on attempt {attempt}.")
+                break
+
+            
+            logger.warning(
+                f"⚠️ Validation failed on attempt {attempt} for [{self.platform_name.upper()}]: {validation_error}"
+            )
+
+            if attempt <= self.MAX_RETRIES:
+                messages.append({"role": "assistant", "content": raw_response})
+                messages.append({
                     "role": "user",
-                    "content": prompt,
-                },
-            ],
-            model=self.model_name,
-            temperature=0.7,
-        )
+                    "content": (
+                        f"Your output failed validation for the following reason(s):\n"
+                        f"{validation_error}\n\n"
+                        f"Please regenerate the content fixing ONLY these issues while keeping the core message."
+                    ),
+                })
 
-        raw_response = chat_completion.choices[0].message.content
-
+        
         return GeneratedVariant(
-            platform=self.platform_name,
-            content=raw_response.strip(),
-            hashtags=[],  
+            platform=SocialPlatform(self.platform_name.lower()),
+            content=raw_response,
+            hashtags=[],
+            is_valid=is_valid,
+            validation_error=validation_error if not is_valid else None,
         )

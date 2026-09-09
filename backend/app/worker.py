@@ -1,7 +1,7 @@
 import asyncio
 from config.settings import logger
 from config.connections import supabase_admin
-from config.settings import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES , SOCIAL_DIMENSIONS
+from config.settings import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES 
 from app.dependencies import create_orchestrator
 
 
@@ -66,4 +66,4 @@ if __name__ == "__main__":
 # insert variant
 # Error handling 
 # job failure handling 
-
+# hash tags

@@ -121,7 +121,7 @@ class Orchestrator:
             try:
                 logger.info(f"💾 Persisting {len(variants)} variant(s) for Post ID: {post_id}...")
                 
-                # Execute batch upsert via the repository
+                
                 persisted_variants = await self.variant_repo.create_many(
                     post_id=post_id, 
                     variants=variants

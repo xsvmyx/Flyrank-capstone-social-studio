@@ -45,25 +45,34 @@ class LLMService:
         return instances
 
     async def generate_all_variants(self, source_text: str) -> List[GeneratedVariant]:
-        """
-        Executes Groq API requests concurrently for all registered agents.
-        """
-        if not self._agents:
-            logger.warning("⚠️ No agents registered with @register_agent.")
-            return []
+            """
+            Executes Groq API requests concurrently for all registered agents.
+            """
+            if not self._agents:
+                logger.warning("⚠️ No agents registered with @register_agent.")
+                return []
 
-        logger.info(f"🚀 Triggering Groq generation across {len(self._agents)} agent(s) concurrently...")
+            logger.info(f"🚀 Triggering Groq generation across {len(self._agents)} agent(s) concurrently...")
 
-        # Parallel execution across all loaded agents
-        tasks = [agent.generate_variant(source_text) for agent in self._agents]
-        results: List[GeneratedVariant] = await asyncio.gather(*tasks, return_exceptions=False)
+            # Parallel execution across all loaded agents
+            tasks = [agent.generate_variant(source_text) for agent in self._agents]
+            
+            
+            raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Log generated content per platform
-        for variant in results:
-            logger.info(
-                f"\n--- [GENERATED VARIANT: {variant.platform.upper()}] ---\n"
-                f"{variant.content}\n"
-                f"-----------------------------------"
-            )
+            successful_variants: List[GeneratedVariant] = []
 
-        return results
+            for result in raw_results:
+                if isinstance(result, Exception):
+                    logger.error(f"❌ An agent failed during generation: {result}", exc_info=result)
+                    continue
+
+                
+                logger.info(
+                    f"\n--- [GENERATED VARIANT: {result.platform.upper()}] ---\n"
+                    f"{result.content}\n"
+                    f"-----------------------------------"
+                )
+                successful_variants.append(result)
+
+            return successful_variants

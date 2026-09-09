@@ -29,7 +29,7 @@ class VariantRepository:
                 "post_id": post_id,
                 "platform": variant.platform,
                 "content": variant.content,
-                "status": "completed",
+                "status": "draft",
             }
             for variant in variants
         ]

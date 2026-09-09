@@ -6,9 +6,9 @@ CREATE TYPE public.social_platform AS ENUM (
 );
 
 CREATE TYPE public.variant_status AS ENUM (
-    'pending',
-    'completed',
-    'failed',
+    'draft',
+    'approved',
+    'rejected',
     'published'
 );
 
