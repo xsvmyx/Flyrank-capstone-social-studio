@@ -68,7 +68,9 @@ def get_storage_repository() -> StorageRepository:
     """Uses admin client for bypass storage policies if needed."""
     return StorageRepository(supabase_client=supabase_admin)
 
-
+def get_variant_repository(db: Client = Depends(get_db)) -> VariantRepository:
+    return VariantRepository(supabase_client=db)
+1
 ############# SERVICES
 
 

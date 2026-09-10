@@ -62,8 +62,5 @@ if __name__ == "__main__":
 #TO DO LIST :
 # url scraping service
 # MORE GROQ AGENTS
-# VALIDATOR
-# insert variant
-# Error handling 
 # job failure handling 
 # hash tags

@@ -6,18 +6,19 @@ from schemas.posts_schemas import RawPostResponse
 from schemas.variant_schemas import GeneratedVariant
 from repositories.variant_repository import VariantRepository
 
+
 class Orchestrator:
     """
     Central orchestrator for the post processing pipeline.
     Connects the PGMQ queue, data access (Repositories),
-    and business services (Image Processing, LLM Agents, Validation).
+    and business services (LLM Agents, Validation).
     """
 
     def __init__(
         self,
         raw_post_repo: RawPostRepository,
         llm_service: LLMService,
-        variant_repo: VariantRepository
+        variant_repo: VariantRepository,
     ):
         self.raw_post_repo = raw_post_repo
         self.llm_service = llm_service
@@ -30,30 +31,41 @@ class Orchestrator:
         """
         post_id = payload.get("post_id")
         if not post_id:
+            logger.error("❌ Job failed: Payload missing required key 'post_id'")
             raise ValueError("Payload missing required key 'post_id'")
-
-        
-        source_data = await self._fetch_and_prepare_source(post_id)
-        content = source_data.get("raw_content")
 
         logger.info(f"⚙️ Executing job for Post ID: {post_id}")
 
-        
-        generated_variants: List[GeneratedVariant] = await self._generate_text_variants(content)
+        try:
+            
+            source_data = await self._fetch_and_prepare_source(post_id)
+            content = source_data.get("raw_content")
 
-        logger.info(f"✨ Successfully generated {len(generated_variants)} text variant(s).")
+            if not content or not content.strip():
+                logger.warning(f"⚠️ Post ID {post_id} has empty content. Skipping generation.")
+                return {"status": "skipped", "reason": "empty_content", "post_id": post_id}
 
-        
-        await self._persist_results(post_id=post_id, variants=generated_variants)
+            
+            generated_variants: List[GeneratedVariant] = await self._generate_text_variants(content)
 
-        return {"status": "success", "post_id": post_id}
+            if not generated_variants:
+                logger.error(f"❌ Zero variants produced for Post ID: {post_id}")
+                return {"status": "failed", "reason": "no_variants_generated", "post_id": post_id}
 
+            logger.info(f"✨ Successfully generated {len(generated_variants)} text variant(s).")
 
+            
+            await self._persist_results(post_id=post_id, variants=generated_variants)
+
+            return {"status": "success", "post_id": post_id}
+
+        except Exception as e:
+            logger.exception(f"❌ Fatal error executing job for Post ID {post_id}: {e}")
+            raise e  
 
     async def _fetch_and_prepare_source(self, post_id: str) -> Dict[str, Any]:
         """
-        Fetches the source post from the database using RawPostRepository
-        and returns a dictionary payload for the processing pipeline.
+        Fetches the source post from the database using RawPostRepository.
         """
         logger.info(f"📥 Fetching raw post source for ID: {post_id}")
         
@@ -73,64 +85,39 @@ class Orchestrator:
         }
 
     async def _generate_text_variants(self, source_text: str) -> List[GeneratedVariant]:
-            """
-            Calls LLMService to generate text variants dynamically across all agents
-            and logs the generated content for each platform.
-            """
-            # logger.info("🤖 Triggering text variant generation...")
-            variants = await self.llm_service.generate_all_variants(source_text)
-
-            return variants
-
-
-
-
-    async def _process_media_variants(
-        self,
-        raw_media_path: str,
-        user_id: str
-    ) -> Dict[str, str]:
         """
-        Handles downloading, multi-platform image resizing,
-        and uploading of image variants.
+        Calls LLMService to generate text variants dynamically across all agents.
         """
-        ...
-
-    async def _validate_constraints(
-        self,
-        text_variants: List[GeneratedVariant]
-    ) -> Dict[str, bool]:
-        """
-        Verifies that each variant complies with required rules (length, hashtags, tone).
-        """
-        ...
+        try:
+            return await self.llm_service.generate_all_variants(source_text)
+        except Exception as e:
+            logger.error(f"❌ Error during variant generation pipeline: {e}", exc_info=True)
+            return []
 
     async def _persist_results(
-            self,
-            post_id: str,
-            variants: List[GeneratedVariant]
-        ) -> None:
-            """
-            Persists validated variants into the public.variants table using VariantRepository.
-            Handles empty payload protection and logs insertion status.
-            """
-            if not variants:
-                logger.warning(f"⚠️ No variants generated to persist for Post ID: {post_id}")
-                return
+        self,
+        post_id: str,
+        variants: List[GeneratedVariant]
+    ) -> None:
+        """
+        Persists validated variants into the public.variants table using VariantRepository.
+        """
+        if not variants:
+            logger.warning(f"⚠️ No variants generated to persist for Post ID: {post_id}")
+            return
 
-            try:
-                logger.info(f"💾 Persisting {len(variants)} variant(s) for Post ID: {post_id}...")
-                
-                
-                persisted_variants = await self.variant_repo.create_many(
-                    post_id=post_id, 
-                    variants=variants
-                )
-                
-                logger.info(
-                    f"✅ Successfully persisted {len(persisted_variants)} variant(s) "
-                    f"to database for Post ID: {post_id}"
-                )
-            except Exception as e:
-                logger.error(f"❌ Database error persisting variants for Post ID {post_id}: {e}")
-                raise e
+        try:
+            logger.info(f"💾 Persisting {len(variants)} variant(s) for Post ID: {post_id}...")
+            
+            persisted_variants = await self.variant_repo.create_many(
+                post_id=post_id, 
+                variants=variants
+            )
+            
+            logger.info(
+                f"✅ Successfully persisted {len(persisted_variants)} variant(s) "
+                f"for Post ID: {post_id}"
+            )
+        except Exception as e:
+            logger.error(f"❌ Database error persisting variants for Post ID {post_id}: {e}", exc_info=True)
+            raise e

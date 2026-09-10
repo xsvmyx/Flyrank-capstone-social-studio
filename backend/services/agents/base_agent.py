@@ -36,7 +36,7 @@ class BaseAgent(ABC):
     def validate(self, content: str) -> tuple[bool, Optional[str]]:
         """
         Retourns (True, None) if valid,
-        or (False, "raison of failure") if invalid.
+        or (False, "reason of failure") if invalid.
         """
         pass
 
@@ -53,7 +53,7 @@ class BaseAgent(ABC):
 
         prompt = self.build_prompt(source_text)
         
-        # Historique de discussion pour permettre le "Recall" avec auto-correction
+        
         messages = [
             {
                 "role": "system",
