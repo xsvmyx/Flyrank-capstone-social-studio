@@ -19,7 +19,7 @@ class VariantRepository:
     ) -> List[VariantResponse]:
         """
         Batch inserts/upserts a list of generated content variants for a given post_id.
-        Sets status dynamically (APPROVED if valid, REJECTED if invalid) and captures validation_error.
+        Sets status dynamically (DRAFT if valid, REJECTED if invalid) and captures validation_error.
         """
         if not variants:
             return []
@@ -29,7 +29,7 @@ class VariantRepository:
                 "post_id": post_id,
                 "platform": variant.platform.value if hasattr(variant.platform, "value") else variant.platform,
                 "content": variant.content,
-                "status": VariantStatus.APPROVED.value if variant.is_valid else VariantStatus.REJECTED.value,
+                "status": VariantStatus.DRAFT.value if variant.is_valid else VariantStatus.REJECTED.value,
                 "error_message": variant.validation_error if not variant.is_valid else None,
             }
             for variant in variants

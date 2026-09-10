@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS public.variants (
     post_id UUID NOT NULL REFERENCES public.raw_posts(id) ON DELETE CASCADE,
     platform public.social_platform NOT NULL,
     content TEXT NOT NULL DEFAULT '',
-    status public.variant_status NOT NULL DEFAULT 'pending',
+    status public.variant_status NOT NULL DEFAULT 'draft',
     error_message TEXT,
     metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

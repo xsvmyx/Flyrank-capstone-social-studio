@@ -1,7 +1,8 @@
-
 CREATE EXTENSION IF NOT EXISTS pgmq CASCADE;
 
-SELECT pgmq.create('raw_posts_jobs');
+
+SELECT pgmq.create('generation_jobs');
+
 
 CREATE OR REPLACE FUNCTION enqueue_raw_post_job()
 RETURNS TRIGGER 
@@ -11,7 +12,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     PERFORM pgmq.send(
-        queue_name => 'raw_posts_jobs',
+        queue_name => 'generation_jobs',
         msg => jsonb_build_object(
             'post_id', NEW.id,
             'user_id', NEW.user_id,
@@ -26,11 +27,13 @@ $$;
 
 GRANT USAGE ON SCHEMA pgmq TO postgres, anon, authenticated, service_role;
 
+
 DROP TRIGGER IF EXISTS trigger_enqueue_raw_post ON public.raw_posts;
 CREATE TRIGGER trigger_enqueue_raw_post
     AFTER INSERT ON public.raw_posts
     FOR EACH ROW
     EXECUTE FUNCTION enqueue_raw_post_job();
+
 
 CREATE OR REPLACE FUNCTION public.pgmq_read(queue_name text, vt integer, qty integer)
 RETURNS TABLE (
@@ -57,5 +60,15 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN pgmq.delete(queue_name, msg_id);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.pgmq_send(queue_name text, msg jsonb)
+RETURNS bigint 
+SECURITY DEFINER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN pgmq.send(queue_name, msg);
 END;
 $$;
