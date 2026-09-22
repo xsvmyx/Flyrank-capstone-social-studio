@@ -8,7 +8,7 @@ DECLARE
     v_msg_id BIGINT;
 BEGIN
     SELECT pgmq.send(
-        'raw_posts_jobs', 
+        'generation_jobs', 
         jsonb_build_object('post_id', p_post_id)
     ) INTO v_msg_id;
     

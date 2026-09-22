@@ -16,3 +16,10 @@ class RawPostResponse(BaseModel):
     image_url: Optional[str] = None
     user_id: str
     created_at: Optional[datetime] = None
+
+
+
+class RegeneratePostResponse(BaseModel):
+    message: str
+    msg_id: int
+    post_id: str

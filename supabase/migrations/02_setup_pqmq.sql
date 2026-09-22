@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgmq CASCADE;
 
 
-SELECT pgmq.create('generation_jobs');
+SELECT pgmq.create('raw_posts_jobs');
 
 
 CREATE OR REPLACE FUNCTION enqueue_raw_post_job()
@@ -12,7 +12,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     PERFORM pgmq.send(
-        queue_name => 'generation_jobs',
+        queue_name => 'raw_posts_jobs',
         msg => jsonb_build_object(
             'post_id', NEW.id,
             'user_id', NEW.user_id,

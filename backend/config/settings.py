@@ -24,7 +24,7 @@ if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     raise RuntimeError("auth.py: Missing Supabase Variables")
 
 
-QUEUE_NAME = "generation_jobs"
+QUEUE_NAME = "raw_posts_jobs"
 VISIBILITY_TIMEOUT = 20  
 MAX_RETRIES = 3
 

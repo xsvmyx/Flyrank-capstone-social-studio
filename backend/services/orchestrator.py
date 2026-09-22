@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List , Tuple
 from config.settings import logger
 from services.llm_service import LLMService
 from repositories.raw_post_repository import RawPostRepository
@@ -28,8 +28,7 @@ class Orchestrator:
     async def execute_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
             """
             Main entry point called by the PGMQ Worker.
-            Orchestrates the job processing lifecycle with concurrent execution 
-            excluding already-approved variants.
+            Orchestrates the job processing lifecycle using non-approved targets only.
             """
             post_id = payload.get("post_id")
 
@@ -48,28 +47,22 @@ class Orchestrator:
                     logger.warning(f"⚠️ Post ID {post_id} has empty content. Skipping generation.")
                     return {"status": "skipped", "reason": "empty_content", "post_id": post_id}
 
-                # 2. Fetch approved platforms to exclude from generation
-                approved_platforms = await self._get_approved_platforms(post_id)
-                if approved_platforms:
-                    logger.info(f"📋 Found APPROVED platform(s) to skip: {approved_platforms}")
+                # 2. Fetch targets (DRAFT / REJECTED)
+                non_approved_targets = await self._get_non_approved_platforms_with_data(post_id)
 
-                # 3. Generate missing variants in parallel via LLMService
+                # 3. Generate / Regenerate
                 generated_variants = await self._generate_text_variants(
                     source_text=content,
-                    excluded_platforms=approved_platforms
+                    non_approved_targets=non_approved_targets
                 )
 
                 if not generated_variants:
-                    if approved_platforms:
-                        logger.info(f"⏩ All variants are already APPROVED for Post ID: {post_id}. Nothing to do.")
-                        return {"status": "skipped", "reason": "all_approved", "post_id": post_id}
-                    
-                    logger.error(f"❌ Zero variants produced for Post ID: {post_id}")
-                    return {"status": "failed", "reason": "no_variants_generated", "post_id": post_id}
+                    logger.info(f"⏩ No variants needed or generated for Post ID: {post_id}")
+                    return {"status": "skipped", "reason": "nothing_to_generate", "post_id": post_id}
 
-                logger.info(f"✨ Successfully generated {len(generated_variants)} new variant(s).")
+                logger.info(f"✨ Successfully generated/regenerated {len(generated_variants)} variant(s).")
 
-                # 4. Persist results in database
+                # 4. Persist
                 persisted_results = await self._persist_results(post_id=post_id, variants=generated_variants)
 
                 return {
@@ -81,7 +74,6 @@ class Orchestrator:
             except Exception as e:
                 logger.exception(f"❌ Fatal error executing job for Post ID {post_id}: {e}")
                 raise e
-
 
     async def _fetch_and_prepare_source(self, post_id: str) -> Dict[str, Any]:
         """
@@ -124,29 +116,53 @@ class Orchestrator:
             return approved_platforms
 
 
+    async def _get_non_approved_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
+            """
+            Fetches existing non-APPROVED variants (DRAFT or REJECTED).
+            Returns a mapping of: {platform_name: error_message_or_None}
+            """
+            existing_variants = await self.variant_repo.get_by_post_id(post_id)
+            if not existing_variants:
+                return {}
 
-
+            return {
+                (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
+                for v in existing_variants
+                if v.status != VariantStatus.APPROVED
+            }
 
 
 
     async def _generate_text_variants(
             self, 
             source_text: str, 
-            excluded_platforms: Optional[List[str]] = None
+            non_approved_targets: Optional[Dict[str, Optional[str]]] = None
         ) -> List[GeneratedVariant]:
             """
-            Calls LLMService to generate text variants concurrently,
-            excluding platforms that are already approved.
+            Dispatches generation requests to LLMService:
+            - Calls generate_variants (initial run) if non_approved_targets is empty.
+            - Calls regenerate_variants (targeted run) if non_approved_targets contains platforms to retry/correct.
             """
             try:
-                return await self.llm_service.generate_variants(
+                targets = non_approved_targets or {}
+
+                
+                if not targets:
+                    logger.info("🚀 Triggering initial generation for all platforms...")
+                    return await self.llm_service.generate_variants(
+                        source_text=source_text
+                    )
+
+                
+                logger.info(f"🔄 Triggering targeted regeneration for platforms: {list(targets.keys())}")
+                return await self.llm_service.regenerate_variants(
                     source_text=source_text,
-                    excluded_platforms=excluded_platforms or []
+                    target_feedbacks=targets
                 )
+
             except Exception as e:
                 logger.error(f"❌ Error during variant generation pipeline: {e}", exc_info=True)
                 return []
-
 
 
     async def _persist_results(
@@ -169,3 +185,40 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"❌ Database error persisting variants for Post ID {post_id}: {e}", exc_info=True)
             raise e
+
+
+
+
+    
+
+    async def _categorize_variants_by_status(
+        self, 
+        post_id: str
+    ) -> Tuple[List[str], List[str], Dict[str, str]]:
+        """
+        Fetches existing variants for a post_id and categorizes platforms into:
+        - approved_platforms: List[str]
+        - draft_platforms: List[str]
+        - rejected_feedbacks: Dict[str, str] (platform -> error_message)
+        """
+        existing_variants = await self.variant_repo.get_by_post_id(post_id)
+        if not existing_variants:
+            return [], [], {}
+
+        approved_platforms: List[str] = []
+        draft_platforms: List[str] = []
+        rejected_feedbacks: Dict[str, str] = {}
+
+        for v in existing_variants:
+            platform_str = v.platform.value if hasattr(v.platform, "value") else str(v.platform)
+            platform_key = platform_str.lower()
+
+            if v.status == VariantStatus.APPROVED:
+                approved_platforms.append(platform_key)
+            elif v.status == VariantStatus.DRAFT:
+                draft_platforms.append(platform_key)
+            elif v.status == VariantStatus.REJECTED:
+                
+                rejected_feedbacks[platform_key] = v.error_message or ""
+
+        return approved_platforms, draft_platforms, rejected_feedbacks
