@@ -48,14 +48,16 @@ class Orchestrator:
                     return {"status": "skipped", "reason": "empty_content", "post_id": post_id}
 
                 # 2. Fetch targets (DRAFT / REJECTED)
-                non_approved_targets = await self._get_non_approved_platforms_with_data(post_id)
-                approved_targets = await self._get_approved_platforms_with_data(post_id)
+                
+                approved , rejected , draft = await self._get_categorized_platforms(post_id=post_id)
+            
 
                 # 3. Generate / Regenerate
                 generated_variants = await self._generate_text_variants(
                     source_text=content,
-                    non_approved_targets=non_approved_targets,
-                    approved_targets=approved_targets
+                    approved_targets=approved,
+                    rejected_targets=rejected,
+                    draft_targets = draft,
                 )
 
                 if not generated_variants:
@@ -102,8 +104,7 @@ class Orchestrator:
 
     async def _get_approved_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
             """
-            Fetches existing non-APPROVED variants (DRAFT or REJECTED).
-            Returns a mapping of: {platform_name: error_message_or_None}
+            Fetches existing APPROVED variants 
             """
             existing_variants = await self.variant_repo.get_by_post_id(post_id)
             if not existing_variants:
@@ -117,9 +118,9 @@ class Orchestrator:
 
 
 
-    async def _get_non_approved_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
+    async def _get_rejected_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
             """
-            Fetches existing non-APPROVED variants (DRAFT or REJECTED).
+            Fetches existing REJECTED.
             Returns a mapping of: {platform_name: error_message_or_None}
             """
             existing_variants = await self.variant_repo.get_by_post_id(post_id)
@@ -129,51 +130,112 @@ class Orchestrator:
             return {
                 (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
                 for v in existing_variants
-                if v.status != VariantStatus.APPROVED
+                if v.status == VariantStatus.REJECTED
             }
+
+    async def _get_draft_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
+            existing_variants = await self.variant_repo.get_by_post_id(post_id)
+            if not existing_variants:
+                return {}
+
+            return {
+                (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
+                for v in existing_variants
+                if v.status == VariantStatus.DRAFT
+            }
+
+
+    async def _get_categorized_platforms(
+        self, post_id: str
+    ) -> Tuple[Dict[str, Optional[str]], Dict[str, Optional[str]], Dict[str, Optional[str]]]:
+        """
+        Fetches all existing variants for a post_id in a single query and categorizes them 
+        into (approved, rejected, draft) mappings of {platform_name: error_message_or_None}.
+        """
+        existing_variants = await self.variant_repo.get_by_post_id(post_id)
+        if not existing_variants:
+            return {}, {}, {}
+
+        approved: Dict[str, Optional[str]] = {}
+        rejected: Dict[str, Optional[str]] = {}
+        draft: Dict[str, Optional[str]] = {}
+
+        for v in existing_variants:
+            platform_key = (
+                v.platform.value if hasattr(v.platform, "value") else str(v.platform)
+            ).lower()
+
+            if v.status == VariantStatus.APPROVED:
+                approved[platform_key] = v.error_message
+            elif v.status == VariantStatus.REJECTED:
+                rejected[platform_key] = v.error_message
+            elif v.status == VariantStatus.DRAFT:
+                draft[platform_key] = v.error_message
+
+        return approved, rejected, draft
+
 
 
 
     async def _generate_text_variants(
-            self, 
-            source_text: str, 
-            non_approved_targets: Optional[Dict[str, Optional[str]]] = None,
-            approved_targets: Optional[Dict[str, Optional[str]]] = None
+            self,
+            source_text: str,
+            approved_targets: Optional[Dict[str, Optional[str]]] = None,
+            rejected_targets: Optional[Dict[str, Optional[str]]] = None,
+            draft_targets: Optional[Dict[str, Optional[str]]] = None
         ) -> List[GeneratedVariant]:
             """
-            Dispatches generation requests to LLMService:
-            - Skips execution if all variants are already APPROVED.
-            - Calls generate_variants (initial run) if both approved and non_approved targets are empty.
-            - Calls regenerate_variants (targeted run) if non_approved_targets contains platforms to retry/correct.
+            Dispatches generation requests to LLMService based on state rules:
+            - Initial run (nothing exists) -> calls generate_variants.
+            - Has rejected variants -> calls regenerate_variants on rejected targets.
+            - Only draft or only approved -> skips with dedicated logs.
             """
             try:
                 approved = approved_targets or {}
-                non_approved = non_approved_targets or {}
+                rejected = rejected_targets or {}
+                draft = draft_targets or {}
 
-                # CASE 1
-                if approved and not non_approved:
-                    logger.info(
-                        f"⏩ All target platforms are already APPROVED ({list(approved.keys())}). "
-                        f"Skipping generation/regeneration entirely."
-                    )
-                    return []
-
-                # CASE 2: 
-                if not non_approved and not approved:
+                # 1. INITIAL CASE: No variants exist yet
+                if not approved and not rejected and not draft:
                     logger.info("🚀 Triggering initial generation for all platforms...")
                     return await self.llm_service.generate_variants(
                         source_text=source_text
                     )
 
-                # CAS 3:
-                logger.info(f"🔄 Triggering targeted regeneration for platforms: {list(non_approved.keys())}")
-                return await self.llm_service.regenerate_variants(
-                    source_text=source_text,
-                    target_feedbacks=non_approved
-                )
+                # 2. REJECTED CASE: There are rejected variants -> regenerate them
+                if rejected:
+                    logger.info(
+                        f"🔄 Triggering targeted regeneration for REJECTED platforms: "
+                        f"{list(rejected.keys())}"
+                    )
+                    return await self.llm_service.regenerate_variants(
+                        source_text=source_text,
+                        target_feedbacks=rejected
+                    )
+
+                # 3. DRAFT-ONLY CASE: Waiting for human review
+                if draft and not approved:
+                    logger.info(
+                        f"⏳ All existing variants are in DRAFT status ({list(draft.keys())}). "
+                        f"Awaiting human review. Skipping generation."
+                    )
+                    return []
+
+                # 4. APPROVED-ONLY CASE (or APPROVED + DRAFT with no REJECTED)
+                if approved and not rejected:
+                    logger.info(
+                        f"⏩ All actionable variants are already APPROVED ({list(approved.keys())}). "
+                        f"Skipping generation/regeneration entirely."
+                    )
+                    return []
+
+                return []
 
             except Exception as e:
-                logger.error(f"❌ Error during variant generation pipeline: {e}", exc_info=True)
+                logger.error(
+                    f"❌ Error during variant generation pipeline: {e}",
+                    exc_info=True
+                )
                 return []
 
     async def _persist_results(

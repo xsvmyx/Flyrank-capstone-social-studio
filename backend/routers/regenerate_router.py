@@ -4,7 +4,7 @@ from supabase import Client
 from app.dependencies import get_db
 
 
-router = APIRouter()
+router = APIRouter(tags=["Regenerate"])
 
 
 
