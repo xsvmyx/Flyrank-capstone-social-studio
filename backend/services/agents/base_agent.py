@@ -113,6 +113,7 @@ class BaseAgent(ABC):
             content=raw_response,
             hashtags=[],
             is_valid=is_valid,
+            error_msg="",
             validation_error=validation_error if not is_valid else None,
         )
 
@@ -132,7 +133,7 @@ class BaseAgent(ABC):
 
         base_prompt = self.build_prompt(source_text)
 
-        # Construction du super prompt incluant la remarque/erreur de l'utilisateur
+        
         user_prompt = base_prompt
         if error_message and error_message.strip():
             user_prompt += (
