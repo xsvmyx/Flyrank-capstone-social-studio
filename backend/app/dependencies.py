@@ -5,9 +5,11 @@ from config.connections import get_user_db_client,supabase_admin
 from repositories.raw_post_repository import RawPostRepository
 from repositories.storage_repository import StorageRepository
 from repositories.variant_repository import VariantRepository
+from repositories.scraping_repository import ScrapingRepository
 from services.upload_service import UploadService
 from services.orchestrator import Orchestrator
 from services.llm_service import LLMService
+
 
 security = HTTPBearer(auto_error=False)
 
@@ -70,7 +72,13 @@ def get_storage_repository() -> StorageRepository:
 
 def get_variant_repository(db: Client = Depends(get_db)) -> VariantRepository:
     return VariantRepository(supabase_client=db)
-1
+
+
+def get_scraping_repository(db: Client = Depends(get_db)) -> ScrapingRepository:
+    return ScrapingRepository(supabase_client=db)
+
+
+
 ############# SERVICES
 
 

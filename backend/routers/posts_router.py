@@ -9,7 +9,7 @@ from schemas.posts_schemas import RawPostCreate, RawPostResponse
 router = APIRouter(prefix="/raw-posts", tags=["Raw Posts"])
 
 
-@router.post("/new", status_code=status.HTTP_201_CREATED)
+@router.post("/new", status_code=status.HTTP_202_ACCEPTED)
 async def create_raw_post(
     post_data: RawPostCreate,
     current_user: dict = Depends(validate_token),
