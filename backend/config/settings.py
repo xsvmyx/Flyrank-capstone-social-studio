@@ -44,3 +44,7 @@ SOCIAL_DIMENSIONS = {
     "twitter": (1200, 675),     
     "facebook": (1200, 630)     
 }
+
+DISCORD_WEBHOOK = os.getenv('DISCORD_WEBHOOK')
+
+
