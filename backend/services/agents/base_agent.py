@@ -108,12 +108,19 @@ class BaseAgent(ABC):
                 })
 
         
+
+        if not is_valid:
+            logger.error(
+                f"❌ Failed to generate valid variant for [{self.platform_name.upper()}] "
+                f"after {attempt} attempt(s). Error: {validation_error}"
+            )
+
         return GeneratedVariant(
             platform=SocialPlatform(self.platform_name.lower()),
             content=raw_response,
             hashtags=[],
             is_valid=is_valid,
-            error_msg="",
+            error_msg=validation_error if not is_valid else None,
             validation_error=validation_error if not is_valid else None,
         )
 
@@ -193,11 +200,18 @@ class BaseAgent(ABC):
                         f"Please regenerate the content fixing ONLY these issues while keeping the core message."
                     ),
                 })
+            
+            if not is_valid:
+                logger.error(
+                    f"❌ Failed to regenerate valid variant for [{self.platform_name.upper()}] "
+                    f"after {attempt} attempt(s). Error: {validation_error}"
+                )
 
         return GeneratedVariant(
             platform=SocialPlatform(self.platform_name.lower()),
             content=raw_response,
             hashtags=[],
             is_valid=is_valid,
+            error_msg=validation_error if not is_valid else None,
             validation_error=validation_error if not is_valid else None,
         )
