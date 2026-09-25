@@ -2,7 +2,9 @@ CREATE TYPE public.social_platform AS ENUM (
     'linkedin',
     'twitter',
     'instagram',
-    'facebook'
+    'facebook',
+    'discord',
+    'telegram'
 );
 
 CREATE TYPE public.variant_status AS ENUM (

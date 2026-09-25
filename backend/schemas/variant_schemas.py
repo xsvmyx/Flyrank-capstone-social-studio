@@ -9,6 +9,8 @@ class SocialPlatform(str, Enum):
     TWITTER = "twitter"
     INSTAGRAM = "instagram"
     FACEBOOK = "facebook"
+    DISCORD = "discord"
+    TELEGRAM = "telegram"
 
 
 class VariantStatus(str, Enum):
