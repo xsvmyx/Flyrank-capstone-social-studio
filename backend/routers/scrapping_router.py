@@ -30,10 +30,6 @@ async def upload_url(
             user_id=user_id,
         )
 
-        logger.info(
-            f"✅ Scraping request created successfully "
-            f"ID={scraping_record.id} for URL: {payload.url}"
-        )
 
         return {
             "message": "Scraping request queued successfully",

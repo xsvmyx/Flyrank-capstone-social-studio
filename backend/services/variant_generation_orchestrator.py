@@ -7,7 +7,7 @@ from schemas.variant_schemas import GeneratedVariant,VariantResponse,VariantStat
 from repositories.variant_repository import VariantRepository
 
 
-class Orchestrator:
+class VariantGenerationOrchestrator:
     """
     Central orchestrator for the post processing pipeline.
     Connects the PGMQ queue, data access (Repositories),
@@ -101,48 +101,6 @@ class Orchestrator:
         }
 
 
-
-    async def _get_approved_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
-            """
-            Fetches existing APPROVED variants 
-            """
-            existing_variants = await self.variant_repo.get_by_post_id(post_id)
-            if not existing_variants:
-                return {}
-
-            return {
-                (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
-                for v in existing_variants
-                if v.status == VariantStatus.APPROVED
-            }
-
-
-
-    async def _get_rejected_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
-            """
-            Fetches existing REJECTED.
-            Returns a mapping of: {platform_name: error_message_or_None}
-            """
-            existing_variants = await self.variant_repo.get_by_post_id(post_id)
-            if not existing_variants:
-                return {}
-
-            return {
-                (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
-                for v in existing_variants
-                if v.status == VariantStatus.REJECTED
-            }
-
-    async def _get_draft_platforms_with_data(self, post_id: str) -> Dict[str, Optional[str]]:
-            existing_variants = await self.variant_repo.get_by_post_id(post_id)
-            if not existing_variants:
-                return {}
-
-            return {
-                (v.platform.value if hasattr(v.platform, "value") else str(v.platform)).lower(): v.error_message
-                for v in existing_variants
-                if v.status == VariantStatus.DRAFT
-            }
 
 
     async def _get_categorized_platforms(

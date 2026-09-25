@@ -7,9 +7,9 @@ from repositories.storage_repository import StorageRepository
 from repositories.variant_repository import VariantRepository
 from repositories.scraping_repository import ScrapingRepository
 from services.upload_service import UploadService
-from services.orchestrator import Orchestrator
+from services.variant_generation_orchestrator import VariantGenerationOrchestrator
 from services.llm_service import LLMService
-
+from services.scraping_service import ScrapingService
 
 security = HTTPBearer(auto_error=False)
 
@@ -94,7 +94,24 @@ def get_upload_service(
 
 
 
-def create_orchestrator() -> Orchestrator:
+
+
+
+
+########### ADMIN SERVICES
+
+
+def get_scraping_service() -> ScrapingService:
+
+    scraping_repo = ScrapingRepository(supabase_client=supabase_admin)
+    raw_post_repo = RawPostRepository(supabase_client=supabase_admin)
+
+
+    return ScrapingService(scraping_repo=scraping_repo,raw_post_repo=raw_post_repo)
+
+
+
+def create_variant_generation_orchestrator() -> VariantGenerationOrchestrator:
     
     raw_post_repo = RawPostRepository(supabase_client=supabase_admin)
     variant_repo = VariantRepository(supabase_client=supabase_admin)
@@ -102,7 +119,7 @@ def create_orchestrator() -> Orchestrator:
 
     llm_service = LLMService()
 
-    return Orchestrator(
+    return VariantGenerationOrchestrator(
         raw_post_repo=raw_post_repo,
         llm_service=llm_service,
         variant_repo=variant_repo

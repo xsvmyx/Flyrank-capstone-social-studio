@@ -3,10 +3,7 @@ from schemas.posts_schemas import RegeneratePostResponse
 from supabase import Client
 from app.dependencies import get_db
 
-
 router = APIRouter(tags=["Regenerate"])
-
-
 
 
 @router.post(
@@ -20,7 +17,7 @@ async def regenerate_post(
 ):
     """
     Triggers a re-generation job for an existing post by executing 
-    the enqueue_regeneration_job RPC in Supabase.
+    the enqueue_regeneration_job RPC in Supabase into 'background_jobs'.
     """
     try:
         response = supabase.rpc(
@@ -42,6 +39,8 @@ async def regenerate_post(
             post_id=post_id
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
