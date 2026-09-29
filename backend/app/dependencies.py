@@ -139,6 +139,7 @@ def create_publishing_orchestrator() -> VariantPublishingOrchestrator:
     
     publishing_repo = PublishHistoryRepository(supabase_client=supabase_admin)
     variant_repo = VariantRepository(supabase_client=supabase_admin)
+    raw_post_repo = RawPostRepository(supabase_client=supabase_admin)
 
 
     publish_service = PublishService(
@@ -149,6 +150,7 @@ def create_publishing_orchestrator() -> VariantPublishingOrchestrator:
     return VariantPublishingOrchestrator(
         publish_history_repository=publishing_repo,
         variant_repository=variant_repo,
+        raw_post_repositroy=raw_post_repo,
         publish_service=publish_service
 
     )

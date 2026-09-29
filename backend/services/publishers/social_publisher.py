@@ -9,6 +9,11 @@ class SocialPublisher(ABC):
 
     @abstractmethod
     async def publish(
-        self, content: str, metadata: Optional[Dict[str, Any]] = None
+        self, content: str, metadata: Optional[Dict[str, Any]] = None , image_url: Optional[str] = None
     ) -> PublisherResponse:
         pass
+
+
+
+
+    

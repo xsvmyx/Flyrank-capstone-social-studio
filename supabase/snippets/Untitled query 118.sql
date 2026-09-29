@@ -1,0 +1,1 @@
+delete from public.variants where post_id="9bff6d1e-7c40-4a62-9795-9d84451fdec2"

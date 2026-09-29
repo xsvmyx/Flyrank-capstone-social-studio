@@ -1,6 +1,6 @@
 import httpx
 from typing import Dict, Any, Optional
-from config.settings import DISCORD_WEBHOOK , logger
+from config.settings import DISCORD_WEBHOOK, logger
 from services.publishers.social_publisher import SocialPublisher
 from services.publishers.registry import register_publisher  
 from schemas.publisher_schemas import PublisherResponse  
@@ -14,7 +14,10 @@ class DiscordPublisher(SocialPublisher):
         super().__init__(platform="discord")
 
     async def publish(
-        self, content: str, metadata: Optional[Dict[str, Any]] = None
+        self, 
+        content: str, 
+        metadata: Optional[Dict[str, Any]] = None, 
+        image_url: Optional[str] = None
     ) -> PublisherResponse:
         webhook_url = DISCORD_WEBHOOK
         
@@ -26,8 +29,23 @@ class DiscordPublisher(SocialPublisher):
             "content": content
         }
 
+        
+        embeds = []
         if metadata and "embeds" in metadata:
-            payload["embeds"] = metadata["embeds"]
+            embeds = metadata["embeds"]
+
+        # 2. Si une image_url est transmise, on l'ajoute dans un embed Discord
+        if image_url:
+            logger.info(f"🖼️ Including image in Discord embed: {image_url}")
+            embeds.append({
+                "image": {
+                    "url": image_url
+                }
+            })
+
+        
+        if embeds:
+            payload["embeds"] = embeds
 
         logger.info(f"📤 Sending publication request to Discord Webhook...")
 

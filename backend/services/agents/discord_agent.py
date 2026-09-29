@@ -13,33 +13,37 @@ class DiscordAgent(BaseAgent):
 
     MIN_LENGTH = 10
     MAX_LENGTH = 2000
-    FORBIDDEN_PLACEHOLDERS = [
-        "[insert",
-        "[votre nom]",
-        "[lien]",
-        "[link]",
-        "here is your post",
-        "as an ai",
+
+    FORBIDDEN_PATTERNS = [
+        r"\[\s*(insert\vert{}votre nom\vert{}lien\vert{}link)[^\]]*\]",
+        r"\bhere\s+is\s+your\s+(post|message)\b",
+        r"\bas\s+an\s+ai\b",
     ]
 
     def __init__(self):
         super().__init__(platform_name="discord")
 
+    
     def build_prompt(self, source_text: str) -> str:
-        return f"""
-Adapt the following content into an engaging Discord community message.
+            # Optionally truncate source text to prevent TPM overflow
+            safe_source = source_text[:3000] if len(source_text) > 3000 else source_text
 
-Guidelines:
-- Direct, casual, and highly conversational tone suited for a chat server.
-- Use Discord Markdown formatting: **bold** for emphasis, > for quotes, `#` for headers, `code` for technical terms.
-- Use emojis to add visual structure and keep it lively.
-- Do NOT use social media hashtags (e.g. #tech, #innovation). You may reference channel names (e.g. #general).
-- End with a call-to-action encouraging members to reply or react with emojis.
-- Keep line breaks clear for easy reading on mobile and desktop.
+            return f"""
+    Adapt the following content into an engaging Discord community message.
 
-Source Text:
-{source_text}
-"""
+    Guidelines:
+    - Direct, casual, and highly conversational tone suited for a chat server.
+    - Use Discord Markdown formatting: **bold** for emphasis, > for quotes, `#` for headers, `code` for technical terms.
+    - Use emojis to add visual structure and keep it lively.
+    - Do NOT use social media hashtags (e.g. #tech, #innovation). You may reference channel names (e.g. #general, #announcements).
+    - End with a call-to-action encouraging members to reply or react with emojis.
+    - Keep line breaks clear for easy reading on mobile and desktop.
+    - HARD LIMIT: Your entire response must be strictly between 100 and 1500 characters. Do not write a long essay.
+
+    Source Text:
+    {safe_source}
+    """
+
 
     def validate(self, content: str) -> tuple[bool, Optional[str]]:
         """
@@ -59,29 +63,32 @@ Source Text:
                 f"Length ({length} chars) outside range [{self.MIN_LENGTH}-{self.MAX_LENGTH}]."
             )
 
-        text_lower = text.lower()
 
-
-        found_placeholders = [
-            ph for ph in self.FORBIDDEN_PLACEHOLDERS if ph in text_lower
+        found_patterns = [
+            pattern for pattern in self.FORBIDDEN_PATTERNS
+            if re.search(pattern, text, re.IGNORECASE)
         ]
-        if found_placeholders:
+        if found_patterns:
             errors.append(
-                f"Forbidden placeholder(s) detected: {', '.join(repr(ph) for ph in found_placeholders)}."
+                f"Forbidden placeholder/AI patterns detected: {', '.join(found_patterns)}."
             )
 
 
-        social_hashtags = re.findall(r"(?<!#)(?<!\w)#([a-zA-Z0-9_]+)", text)
+        social_hashtag_candidates = re.findall(r"(?<!\w)#([a-zA-Z0-9_-]+)", text)
         
 
-        common_channels = {"general", "announcements", "help", "welcome", "discussion", "dev", "chat"}
-        detected_hashtags = [h for h in social_hashtags if h.lower() not in common_channels]
+        markdown_headers = re.findall(r"^\s*#{1,3}\s+([a-zA-Z0-9_-]+)", text, re.MULTILINE)
+        markdown_headers_lower = {h.lower() for h in markdown_headers}
 
-        if len(detected_hashtags) > 2:
+        detected_hashtags = [
+            h for h in social_hashtag_candidates 
+            if h.lower() not in markdown_headers_lower
+        ]
+
+        if len(detected_hashtags) > 4:
             errors.append(
-                f"Social hashtags detected ({', '.join(detected_hashtags)}). Discord content should not rely on social media hashtags."
+                f"Too many hashtags detected ({', '.join(detected_hashtags)}). Discord content should not rely on social media hashtags."
             )
-
 
         lines = [line for line in text.split("\n") if line.strip()]
         if length > 400 and len(lines) < 2:

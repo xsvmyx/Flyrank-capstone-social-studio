@@ -14,7 +14,7 @@ class FacebookPublisher(SocialPublisher):
         super().__init__(platform="facebook")
 
     async def publish(
-        self, content: str, metadata: Optional[Dict[str, Any]] = None
+        self, content: str, metadata: Optional[Dict[str, Any]] = None , image_url: Optional[str] = None
     ) -> PublisherResponse:
         
         logger.info(f"📤 [MOCK] Sending publication request to Facebook...")

@@ -4,19 +4,21 @@ from config.settings import logger
 from repositories.variant_repository import VariantRepository
 from repositories.publish_history_repository import PublishHistoryRepository
 from services.publish_service import PublishService
-from schemas.variant_schemas import VariantStatus, VariantResponse
+from schemas.variant_schemas import VariantStatus, VariantResponse 
 from schemas.publish_history_schemas import PublishHistoryUpdate
-
+from repositories.raw_post_repository import RawPostRepository
 
 class VariantPublishingOrchestrator:
     def __init__(
         self,
         variant_repository: VariantRepository,
         publish_history_repository: PublishHistoryRepository,
+        raw_post_repositroy: RawPostRepository,
         publish_service: PublishService,
     ):
         self.variant_repository = variant_repository
         self.publish_history_repository = publish_history_repository
+        self.raw_post_repository = raw_post_repositroy
         self.publish_service = publish_service
 
     async def fetch_variant(self, variant_id: UUID | str) -> VariantResponse:
@@ -99,23 +101,28 @@ class VariantPublishingOrchestrator:
 
 
 
-    async def publish(self, variant: Any) -> Dict[str, Any]:
-        """Execute the publication process for a variant using the dedicated publishing service"""
+    async def publish(self, variant: VariantResponse, image_url: Optional[str] = None) -> Dict[str, Any]:
+            """Execute the publication process for a variant using the dedicated publishing service"""
 
-        result = await self.publish_service.publish_variant(variant=variant)
+            result = await self.publish_service.publish_variant(variant=variant, image_url=image_url)
 
-        platform_name = (
-            variant.platform.value
-            if hasattr(variant.platform, "value")
-            else str(variant.platform)
-        )
+            platform_name = (
+                variant.platform.value
+                if hasattr(variant.platform, "value")
+                else str(variant.platform)
+            )
 
-        
-        return result or {
-            "status": "success",
-            "platform": platform_name
-        }
 
+            if result:
+                if hasattr(result, "model_dump"):
+                    return result.model_dump()
+                if isinstance(result, dict):
+                    return result
+
+            return {
+                "status": "success",
+                "platform": platform_name
+            }
 
     async def execute_job(self, payload: Dict[str, Any]) -> None:
         """Orchestrate the async worker job for variant publication.
@@ -161,8 +168,12 @@ class VariantPublishingOrchestrator:
             )
             logger.info(f"PLATFORM: {platform_name}")
 
+
+            url = await self.raw_post_repository.get_image_url_by_id(variant.post_id)
+
+            logger.info(f"LINK : {url}")
             
-            publish_response = await self.publish(variant=variant)
+            publish_response = await self.publish(variant=variant,image_url = url)
 
             
             if history_id:
@@ -201,3 +212,9 @@ class VariantPublishingOrchestrator:
                     logger.error(
                         f"⚠️ Failed to update publish history status to 'failed': {db_err}"
                     )
+
+
+
+##### BETTER ORCHESTRATION , NO POST IF FAILING ....
+##### SEMAPHORES IN AGENTS
+##### 

@@ -61,17 +61,13 @@ class RawPostRepository:
         return RawPostResponse(**response.data[0])
 
 
-
-    # async def get_downloadable_media_url(
-    #     self, raw_path: str, bucket_name: str = "post-media"
-    # ) -> str:
-
-    #     if raw_path.startswith(("http://", "https://")):
-    #         return raw_path
-
-    #     logger.info(f"🔑 Generating signed URL for path: {raw_path}")
-    #     res = self.supabase.storage.from_(bucket_name).create_signed_url(raw_path, 3600)
-
-    #     if isinstance(res, dict):
-    #         return res.get("signedUrl") or res.get("signed_url", "")
-    #     return getattr(res, "signed_url", str(res))
+    async def get_image_url_by_id(self, post_id: str) -> Optional[str]:
+            response = (
+                self.supabase.table("raw_posts")
+                .select("image_url")
+                .eq("id", post_id)
+                .execute()
+            )
+            if not response.data:
+                return None
+            return response.data[0].get("image_url")

@@ -2,13 +2,21 @@ from typing import List, Dict, Any
 from supabase import Client
 
 
-
 class StorageRepository:
-    def __init__(self, supabase_client: Client, bucket_name: str = "post-media"):
+    def __init__(
+        self,
+        supabase_client: Client,
+        bucket_name: str = "post-media"
+    ):
         self.supabase = supabase_client
         self.bucket_name = bucket_name
 
-    async def upload_file(self, file_path: str, file_bytes: bytes, content_type: str) -> None:
+    async def upload_file(
+        self,
+        file_path: str,
+        file_bytes: bytes,
+        content_type: str
+    ) -> None:
         """Uploads raw binary data to the storage bucket."""
         self.supabase.storage.from_(self.bucket_name).upload(
             path=file_path,
@@ -19,17 +27,27 @@ class StorageRepository:
             },
         )
 
-    async def get_signed_url(self, file_path: str, expires_in: int = 3600) -> str:
-        """Generates a signed temporary URL for accessing the file."""
-        res = self.supabase.storage.from_(self.bucket_name).create_signed_url(
-            path=file_path,
-            expires_in=expires_in,
+    def get_public_url(self, file_path: str) -> str:
+        """Retrieves the public and permanent URL of the file."""
+        # Note: In the Supabase Python client, get_public_url is generally synchronous.
+        # It returns a string or a dict depending on the library version.
+        res = self.supabase.storage.from_(self.bucket_name).get_public_url(
+            file_path
         )
-        if isinstance(res, dict) and "signedUrl" in res:
-            return res["signedUrl"]
-        return getattr(res, "signed_url", str(res))
 
-    async def list_files(self, folder_path: str) -> List[Dict[str, Any]]:
+        # Handle the return format depending on the supabase-py version
+        if isinstance(res, dict) and "publicUrl" in res:
+            return res["publicUrl"]
+
+        return getattr(res, "public_url", str(res))
+
+    async def list_files(
+        self,
+        folder_path: str
+    ) -> List[Dict[str, Any]]:
         """Lists files in a given folder path."""
-        files = self.supabase.storage.from_(self.bucket_name).list(path=folder_path)
+        files = self.supabase.storage.from_(self.bucket_name).list(
+            path=folder_path
+        )
+
         return files or []

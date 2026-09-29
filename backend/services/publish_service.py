@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import Dict, List , Any
+from typing import Dict, Optional
 from schemas.variant_schemas import VariantResponse
 from schemas.publisher_schemas import PublisherResponse 
 from fastapi import HTTPException, status
@@ -118,7 +118,7 @@ class PublishService:
 
 
 
-    async def publish_variant(self, variant: VariantResponse) -> PublisherResponse:
+    async def publish_variant(self, variant: VariantResponse,image_url: Optional[str] = None) -> PublisherResponse:
         """
         Prend un variant en paramètre, détermine la plateforme cible, 
         récupère le publisher adéquat via le registre et exécute la publication.
@@ -140,7 +140,8 @@ class PublishService:
         
         publish_response = await publisher.publish(
             content=variant.content,
-            metadata=variant.metadata
+            metadata=variant.metadata,
+            image_url=image_url
         )
 
         logger.info(f"✅ Publication réussie pour le variant ID: {variant.id} sur {platform_name}")
