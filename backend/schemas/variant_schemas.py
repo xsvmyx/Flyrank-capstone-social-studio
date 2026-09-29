@@ -3,7 +3,6 @@ from enum import Enum
 from typing import Any, Dict, Optional, List
 from pydantic import BaseModel, ConfigDict, Field
 
-
 class SocialPlatform(str, Enum):
     LINKEDIN = "linkedin"
     TWITTER = "twitter"
@@ -11,6 +10,19 @@ class SocialPlatform(str, Enum):
     FACEBOOK = "facebook"
     DISCORD = "discord"
     TELEGRAM = "telegram"
+
+
+class GenerateVariantRequest(BaseModel):
+    post_id: str = Field(..., description="Raw post id")
+    platform: SocialPlatform = Field(..., description="target platform")
+
+
+class GenerateVariantResponse(BaseModel):
+    message: str
+    msg_id: int
+    post_id: str
+    platform: SocialPlatform
+
 
 
 class VariantStatus(str, Enum):

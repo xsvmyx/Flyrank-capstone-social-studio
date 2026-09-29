@@ -1,19 +1,18 @@
-import asyncio
 import importlib
 import pkgutil
 from pathlib import Path
-from typing import List , Optional , Dict
+from typing import List, Optional
 
 from config.settings import logger
 from services.agents.base_agent import BaseAgent
 from services.agents.registry import get_registered_agents
-from schemas.variant_schemas import GeneratedVariant
+from schemas.variant_schemas import GeneratedVariant, SocialPlatform
 
 
 class LLMService:
     """
     LLM orchestration service based on the decorated agents registry (@register_agent).
-    Handles dynamic discovery, instantiation, and parallel execution of LLM agents.
+    Handles dynamic discovery, instantiation, and execution of a specific platform agent.
     """
 
     def __init__(self):
@@ -44,96 +43,97 @@ class LLMService:
         )
         return instances
 
+    async def generate_variant_for_platform(
+        self, source_text: str, platform: SocialPlatform , error_message= str
+    ) -> Optional[GeneratedVariant]:
+        """
+        Finds the specific agent matching the platform and generates a single variant.
+        """
+        if not self._agents:
+            logger.warning("⚠️ No agents registered with @register_agent.")
+            return None
 
+        
+        target_platform_str = str(platform).lower()
+        matching_agent = next(
+            (agent for agent in self._agents if str(agent.platform_name).lower() == target_platform_str),
+            None
+        )
 
-    async def generate_variants(self, source_text: str) -> List[GeneratedVariant]:
-            """
-            Sequential generation run: Executes Groq API requests one by one 
-            to avoid rate limits (429 Too Many Requests).
-            """
-            if not self._agents:
-                logger.warning("⚠️ No agents registered with @register_agent.")
-                return []
+        if not matching_agent:
+            logger.error(f"❌ No registered agent found for platform: {platform}")
+            raise ValueError(f"Unsupported platform agent: {platform}")
 
+        logger.info(f"🤖 Generating variant using agent for platform: {matching_agent.platform_name}...")
+
+        try:
+            result = await matching_agent.generate_variant(source_text,error_message)
+
+            platform_str = str(result.platform).upper()
             logger.info(
-                f"🚀 Triggering sequential Groq generation for {len(self._agents)} agent(s)..."
+                f"\n--- [GENERATED VARIANT: {platform_str}] ---\n"
+                f"{result.content}\n"
+                f"-----------------------------------"
             )
+            return result
 
-            successful_variants: List[GeneratedVariant] = []
+        except Exception as e:
+            logger.error(f"❌ Agent for {platform} failed during generation: {e}", exc_info=True)
+            raise e
 
-            for agent in self._agents:
-                try:
 
-                    await asyncio.sleep(3)
+        
+    # async def regenerate_variants(
+    #         self, 
+    #         source_text: str, 
+    #         target_feedbacks: Dict[str, Optional[str]]
+    #     ) -> List[GeneratedVariant]:
+    #         """
+    #         Regeneration run: Sequentially runs targeted agents to prevent 429 rate limits.
+    #         """
+    #         if not self._agents:
+    #             logger.warning("⚠️ No agents registered with @register_agent.")
+    #             return []
 
-                    logger.info(f"🤖 Generating variant for platform...")
-                    result = await agent.generate_variant(source_text)
+    #         target_map = {k.lower(): v for k, v in target_feedbacks.items()}
 
-                    platform_str = str(result.platform).upper()
-                    logger.info(
-                        f"\n--- [GENERATED VARIANT: {platform_str}] ---\n"
-                        f"{result.content}\n"
-                        f"-----------------------------------"
-                    )
-                    successful_variants.append(result)
+    #         agents_to_run = [
+    #             agent for agent in self._agents
+    #             if str(agent.platform_name).lower() in target_map
+    #         ]
 
-                except Exception as e:
-                    logger.error(f"❌ An agent failed during generation: {e}", exc_info=e)
-                    continue
+    #         if not agents_to_run:
+    #             logger.info("⏩ All platforms are already approved or excluded. Nothing to regenerate.")
+    #             return []
 
-            return successful_variants
+    #         logger.info(
+    #             f"🔄 Triggering sequential regeneration for {len(agents_to_run)} agent(s) "
+    #             f"(Targets: {list(target_map.keys())})..."
+    #         )
 
-    async def regenerate_variants(
-            self, 
-            source_text: str, 
-            target_feedbacks: Dict[str, Optional[str]]
-        ) -> List[GeneratedVariant]:
-            """
-            Regeneration run: Sequentially runs targeted agents to prevent 429 rate limits.
-            """
-            if not self._agents:
-                logger.warning("⚠️ No agents registered with @register_agent.")
-                return []
+    #         successful_variants: List[GeneratedVariant] = []
 
-            target_map = {k.lower(): v for k, v in target_feedbacks.items()}
-
-            agents_to_run = [
-                agent for agent in self._agents
-                if str(agent.platform_name).lower() in target_map
-            ]
-
-            if not agents_to_run:
-                logger.info("⏩ All platforms are already approved or excluded. Nothing to regenerate.")
-                return []
-
-            logger.info(
-                f"🔄 Triggering sequential regeneration for {len(agents_to_run)} agent(s) "
-                f"(Targets: {list(target_map.keys())})..."
-            )
-
-            successful_variants: List[GeneratedVariant] = []
-
-            for agent in agents_to_run:
-                try:
+    #         for agent in agents_to_run:
+    #             try:
                     
-                    await asyncio.sleep(3)
+    #                 await asyncio.sleep(3)
 
-                    logger.info(f"🤖 Regenerating variant for {agent.platform_name}...")
-                    result = await agent.regenerate_variant(
-                        source_text=source_text, 
-                        error_message=target_map.get(str(agent.platform_name).lower())
-                    )
+    #                 logger.info(f"🤖 Regenerating variant for {agent.platform_name}...")
+    #                 result = await agent.regenerate_variant(
+    #                     source_text=source_text, 
+    #                     error_message=target_map.get(str(agent.platform_name).lower())
+    #                 )
 
-                    platform_str = str(result.platform).upper()
-                    logger.info(
-                        f"\n--- [REGENERATED VARIANT: {platform_str}] ---\n"
-                        f"{result.content}\n"
-                        f"-----------------------------------"
-                    )
-                    successful_variants.append(result)
+    #                 platform_str = str(result.platform).upper()
+    #                 logger.info(
+    #                     f"\n--- [REGENERATED VARIANT: {platform_str}] ---\n"
+    #                     f"{result.content}\n"
+    #                     f"-----------------------------------"
+    #                 )
+    #                 successful_variants.append(result)
 
-                except Exception as e:
-                    logger.error(f"❌ An agent failed during regeneration: {e}", exc_info=e)
-                    continue
+    #             except Exception as e:
+    #                 logger.error(f"❌ An agent failed during regeneration: {e}", exc_info=e)
+    #                 continue
 
-            return successful_variants
+    #         return successful_variants

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 from supabase import Client
 from schemas.variant_schemas import GeneratedVariant, VariantResponse, VariantStatus
 
@@ -45,6 +45,53 @@ class VariantRepository:
             raise ValueError("Failed to insert or update variants in database.")
 
         return [VariantResponse(**item) for item in response.data]
+
+
+
+    async def create_one(
+        self,
+        post_id: str,
+        variant: GeneratedVariant
+    ) -> VariantResponse:
+        """
+        Inserts or updates a generated content variant for a given post_id.
+        Sets status dynamically (DRAFT if valid, REJECTED if invalid)
+        and captures validation_error.
+        """
+        payload = {
+            "post_id": post_id,
+            "platform": (
+                variant.platform.value
+                if hasattr(variant.platform, "value")
+                else variant.platform
+            ),
+            "content": variant.content,
+            "status": (
+                VariantStatus.DRAFT.value
+                if variant.is_valid
+                else VariantStatus.REJECTED.value
+            ),
+            "error_message": (
+                variant.validation_error
+                if not variant.is_valid
+                else None
+            ),
+        }
+
+        response = (
+            self.supabase
+            .table(self.table_name)
+            .upsert(payload, on_conflict="post_id, platform")
+            .execute()
+        )
+
+        if not response.data:
+            raise ValueError("Failed to insert or update variant in database.")
+
+        return VariantResponse(**response.data[0])
+
+
+
 
     async def update_status_by_id(
         self, 
@@ -118,3 +165,29 @@ class VariantRepository:
         if not response.data:
             return None
         return VariantResponse(**response.data[0])
+
+
+
+    async def get_platform_statuses_by_post_id(
+        self, post_id: str
+    ) -> Dict[str, Dict[str, str | None]]:
+        response = (
+            self.supabase.table(self.table_name)
+            .select("platform, status, error_message")
+            .eq("post_id", post_id)
+            .execute()
+        )
+
+        if not response.data:
+            return {}
+
+        return {
+            item["platform"]: {
+                "status": item["status"],
+                "error_message": item["error_message"],
+            }
+            for item in response.data
+        }
+
+
+

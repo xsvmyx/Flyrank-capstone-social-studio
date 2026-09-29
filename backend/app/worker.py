@@ -9,9 +9,14 @@ scraping_service = get_scraping_service()
 publishing_orchestrator = create_publishing_orchestrator()
 
 
-async def handle_raw_post_created(payload: dict):
-    await variant_generation_orchestrator.execute_job(payload=payload)
+async def mock(payload : dict):
+    logger.info(f"job {payload.get("post_id")} ..... {payload.get("platform")}")
+    
 
+
+async def handle_variant_generation(payload: dict):
+    await variant_generation_orchestrator.execute_job(payload=payload)
+    #await mock(payload=payload)
 
 async def handle_scraping_requested(payload: dict):
     await scraping_service.execute_scraping(payload)
@@ -23,7 +28,7 @@ async def handle_variant_publish(payload: dict):
 
 
 EVENT_HANDLERS = {
-    "raw_post.created": handle_raw_post_created,
+    "variant.generate": handle_variant_generation,
     "scraping.requested": handle_scraping_requested,
     "variant.publish": handle_variant_publish,
 }

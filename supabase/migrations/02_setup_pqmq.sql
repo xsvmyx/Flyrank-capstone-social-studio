@@ -3,38 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgmq CASCADE;
 
 SELECT pgmq.create('background_jobs');
 
-
-CREATE OR REPLACE FUNCTION enqueue_raw_post_job()
-RETURNS TRIGGER 
-SECURITY DEFINER
-SET search_path = public, pgmq
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    PERFORM pgmq.send(
-        queue_name => 'background_jobs',
-        msg => jsonb_build_object(
-            'event', 'raw_post.created',
-            'payload', jsonb_build_object(
-                'post_id', NEW.id,
-                'user_id', NEW.user_id,
-                'created_at', NEW.created_at
-            )
-        )
-    );
-    RETURN NEW;
-END;
-$$;
-
-
 GRANT USAGE ON SCHEMA pgmq TO postgres, anon, authenticated, service_role;
-
-
-DROP TRIGGER IF EXISTS trigger_enqueue_raw_post ON public.raw_posts;
-CREATE TRIGGER trigger_enqueue_raw_post
-    AFTER INSERT ON public.raw_posts
-    FOR EACH ROW
-    EXECUTE FUNCTION enqueue_raw_post_job();
 
 
 CREATE OR REPLACE FUNCTION public.pgmq_read(queue_name text, vt integer, qty integer)
@@ -72,5 +41,28 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN pgmq.send(queue_name, msg);
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION public.enqueue_variant_job(p_post_id uuid, p_platform text)
+RETURNS bigint 
+SECURITY DEFINER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_msg_id bigint;
+BEGIN
+    v_msg_id := pgmq.send(
+        queue_name => 'background_jobs',
+        msg => jsonb_build_object(
+            'event', 'variant.generate',
+            'payload', jsonb_build_object(
+                'post_id', p_post_id,
+                'platform', p_platform
+            )
+        )
+    );
+    RETURN v_msg_id;
 END;
 $$;
