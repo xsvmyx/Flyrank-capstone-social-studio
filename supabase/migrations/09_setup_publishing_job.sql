@@ -1,3 +1,4 @@
+-- 1. Redéfinir la fonction trigger sans la référence à NEW.platform
 CREATE OR REPLACE FUNCTION enqueue_publish_job()
 RETURNS TRIGGER 
 SECURITY DEFINER
@@ -13,7 +14,6 @@ BEGIN
                 'history_id', NEW.id,
                 'variant_id', NEW.variant_id,
                 'idempotency_key', NEW.idempotency_key,
-                'platform', NEW.platform,
                 'created_at', NEW.created_at
             )
         )
@@ -29,3 +29,5 @@ CREATE TRIGGER trigger_enqueue_publish
     AFTER INSERT ON public.publish_history
     FOR EACH ROW
     EXECUTE FUNCTION enqueue_publish_job();
+
+

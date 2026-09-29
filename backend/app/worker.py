@@ -2,11 +2,11 @@ import asyncio
 from config.settings import logger
 from config.connections import supabase_admin
 from config.settings import QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES 
-from app.dependencies import create_variant_generation_orchestrator,get_scraping_service
+from app.dependencies import create_variant_generation_orchestrator, get_scraping_service,create_publishing_orchestrator
 
 variant_generation_orchestrator = create_variant_generation_orchestrator()
-scraping_service  = get_scraping_service()
-
+scraping_service = get_scraping_service()
+publishing_orchestrator = create_publishing_orchestrator()
 
 
 async def handle_raw_post_created(payload: dict):
@@ -17,13 +17,16 @@ async def handle_scraping_requested(payload: dict):
     await scraping_service.execute_scraping(payload)
 
 
+async def handle_variant_publish(payload: dict):
+    await publishing_orchestrator.execute_job(payload=payload)
+
+
 
 EVENT_HANDLERS = {
     "raw_post.created": handle_raw_post_created,
     "scraping.requested": handle_scraping_requested,
+    "variant.publish": handle_variant_publish,
 }
-
-
 
 
 async def run_worker():
@@ -44,24 +47,20 @@ async def run_worker():
                 read_count = job["read_ct"]
                 message_data = job["message"]
 
-                
                 event_type = message_data.get("event")
                 payload = message_data.get("payload", message_data)
 
                 logger.info(f"📥 Received Job #{msg_id} | Event: '{event_type}' (Attempt {read_count}/{MAX_RETRIES})")
 
-                
                 if read_count > MAX_RETRIES:
                     logger.error(f"❌ Job #{msg_id} ({event_type}) exceeded maximum retries. Dropping job...")
                     supabase_admin.rpc("pgmq_delete", {"queue_name": QUEUE_NAME, "msg_id": msg_id}).execute()
                     continue
 
-                
                 handler = EVENT_HANDLERS.get(event_type)
 
                 if handler:
                     await handler(payload)
-                    
                     
                     supabase_admin.rpc("pgmq_delete", {"queue_name": QUEUE_NAME, "msg_id": msg_id}).execute()
                     logger.info(f"🎉 Job #{msg_id} ({event_type}) processed and deleted successfully!")
@@ -69,14 +68,13 @@ async def run_worker():
                     logger.warning(f"⚠️ Unknown event type '{event_type}' for Job #{msg_id}. Dropping message...")
                     supabase_admin.rpc("pgmq_delete", {"queue_name": QUEUE_NAME, "msg_id": msg_id}).execute()
 
-                
                 continue
 
         except Exception as e:
             logger.error(f"⚠️ Job execution failed: {e}", exc_info=True)
             logger.info(f"🔁 Job will retry in {VISIBILITY_TIMEOUT} seconds...")
 
-        # Pause uniquement si la file est vide ou après une erreur
+        
         await asyncio.sleep(2)
 
 

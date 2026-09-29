@@ -1,59 +1,57 @@
-# import httpx
-# from typing import Dict, Any, Optional
-# from config.settings import logger
-# from services.publishers.base_publisher import SocialPublisher
+import httpx
+from typing import Dict, Any, Optional
+from config.settings import DISCORD_WEBHOOK , logger
+from services.publishers.social_publisher import SocialPublisher
+from services.publishers.registry import register_publisher  
+from schemas.publisher_schemas import PublisherResponse  
 
+@register_publisher
+class DiscordPublisher(SocialPublisher):
+    """
+    Publisher adapter for Discord using Webhooks.
+    """
+    def __init__(self):
+        super().__init__(platform="discord")
 
-# class DiscordPublisher(SocialPublisher):
-#     """
-#     Adaptateur réel pour publier sur Discord via un Webhook.
-#     """
+    async def publish(
+        self, content: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> PublisherResponse:
+        webhook_url = DISCORD_WEBHOOK
+        
+        if not webhook_url:
+            logger.error("❌ DISCORD_WEBHOOK is not configured in settings.")
+            raise ValueError("Discord webhook URL is missing in application settings.")
 
-#     def __init__(self, webhook_url: str):
-#         if not webhook_url:
-#             raise ValueError("DISCORD_WEBHOOK_URL ne doit pas être vide.")
-#         self.webhook_url = webhook_url
+        payload = {
+            "content": content
+        }
 
-#     async def publish(
-#         self, content: str, metadata: Optional[Dict[str, Any]] = None
-#     ) -> Dict[str, Any]:
-#         """
-#         Publie directement un message sur le canal Discord configuré.
-#         """
-#         payload = {"content": content}
+        if metadata and "embeds" in metadata:
+            payload["embeds"] = metadata["embeds"]
 
-#         # Possibilité d'enrichir le message Discord si une image est fournie dans metadata
-#         if metadata and metadata.get("image_url"):
-#             payload["embeds"] = [
-#                 {
-#                     "title": metadata.get("title", ""),
-#                     "image": {"url": metadata["image_url"]},
-#                 }
-#             ]
+        logger.info(f"📤 Sending publication request to Discord Webhook...")
 
-#         try:
-#             async with httpx.AsyncClient(timeout=10.0) as client:
-#                 logger.info("🚀 Publication en cours sur Discord via Webhook...")
-#                 response = await client.post(self.webhook_url, json=payload)
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(webhook_url, json=payload, timeout=10.0)
+                
+                if response.status_code not in (200, 204):
+                    error_detail = response.text
+                    logger.error(f"❌ Discord API error [{response.status_code}]: {error_detail}")
+                    raise RuntimeError(f"Failed to publish to Discord: {error_detail}")
 
-#                 # Discord renvoie 204 No Content en cas de succès Webhook standard (ou 200)
-#                 if response.status_code in (200, 204):
-#                     logger.info("✅ Publication Discord réussie !")
-#                     return {
-#                         "status": "success",
-#                         "platform": "discord",
-#                         "response_code": response.status_code,
-#                     }
+                logger.info("✅ Successfully published content to Discord.")
+                
+                response_json = response.json() if response.content else {"success": True}
 
-#                 response.raise_for_status()
+                return PublisherResponse(
+                    success=True,
+                    platform=self.platform,
+                    status_code=response.status_code,
+                    external_post_id=response_json.get("id"), 
+                    response_data=response_json
+                )
 
-#         except httpx.HTTPStatusError as e:
-#             logger.error(
-#                 f"❌ Échec de publication Discord (HTTP {e.response.status_code}): {e.response.text}"
-#             )
-#             raise e
-#         except Exception as e:
-#             logger.error(
-#                 f"❌ Erreur inattendue lors de la publication Discord: {e}"
-#             )
-#             raise e
+            except httpx.HTTPError as exc:
+                logger.error(f"❌ Network error while calling Discord webhook: {str(exc)}")
+                raise RuntimeError(f"Network error during Discord publication: {str(exc)}")

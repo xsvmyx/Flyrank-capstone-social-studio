@@ -6,10 +6,13 @@ from repositories.raw_post_repository import RawPostRepository
 from repositories.storage_repository import StorageRepository
 from repositories.variant_repository import VariantRepository
 from repositories.scraping_repository import ScrapingRepository
+from repositories.publish_history_repository import PublishHistoryRepository
 from services.upload_service import UploadService
 from services.variant_generation_orchestrator import VariantGenerationOrchestrator
 from services.llm_service import LLMService
 from services.scraping_service import ScrapingService
+from services.variant_publishing_orchestrator import VariantPublishingOrchestrator
+from services.publish_service import PublishService
 
 security = HTTPBearer(auto_error=False)
 
@@ -79,6 +82,10 @@ def get_scraping_repository(db: Client = Depends(get_db)) -> ScrapingRepository:
 
 
 
+def get_publishing_repository(db:Client = Depends(get_db)) -> PublishHistoryRepository:
+    return PublishHistoryRepository(supabase_client=db)
+
+
 ############# SERVICES
 
 
@@ -123,5 +130,25 @@ def create_variant_generation_orchestrator() -> VariantGenerationOrchestrator:
         raw_post_repo=raw_post_repo,
         llm_service=llm_service,
         variant_repo=variant_repo
+
+    )
+
+
+
+def create_publishing_orchestrator() -> VariantPublishingOrchestrator:
+    
+    publishing_repo = PublishHistoryRepository(supabase_client=supabase_admin)
+    variant_repo = VariantRepository(supabase_client=supabase_admin)
+
+
+    publish_service = PublishService(
+        publish_history_repo=publishing_repo,
+        variant_repo=variant_repo,
+    )
+
+    return VariantPublishingOrchestrator(
+        publish_history_repository=publishing_repo,
+        variant_repository=variant_repo,
+        publish_service=publish_service
 
     )

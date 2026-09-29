@@ -8,7 +8,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.publish_history (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     variant_id UUID NOT NULL REFERENCES public.variants(id) ON DELETE CASCADE,
-    platform public.social_platform NOT NULL,
+
     
 
     idempotency_key VARCHAR(255) NOT NULL UNIQUE,
@@ -44,6 +44,22 @@ WITH CHECK (true);
 CREATE POLICY "Users can view publish history of their own posts"
 ON public.publish_history
 FOR SELECT
+TO authenticated
+USING (
+    EXISTS (
+        SELECT 1
+        FROM public.variants v
+        JOIN public.raw_posts p ON v.post_id = p.id
+        WHERE v.id = public.publish_history.variant_id
+          AND p.user_id = auth.uid()
+    )
+);
+
+
+
+CREATE POLICY "Users can delete publish history for their own variants"
+ON public.publish_history
+FOR DELETE
 TO authenticated
 USING (
     EXISTS (
