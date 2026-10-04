@@ -2,8 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from supabase import Client
 from app.dependencies import get_db
-from schemas.variant_schemas import GenerateVariantRequest, GenerateVariantResponse
-
+from schemas.variant_schemas import GenerateVariantRequest, GenerateVariantResponse , BatchJobResult , GenerateBatchVariantsRequest , GenerateBatchVariantsResponse , SocialPlatform
 router = APIRouter(tags=["Generation"])
 
 
@@ -56,44 +55,61 @@ async def generate_post_variant(
 
 
 
+@router.post(
+    "/posts/generate-batch", 
+    response_model=GenerateBatchVariantsResponse, 
+    status_code=status.HTTP_202_ACCEPTED
+)
+async def generate_post_variants_batch(
+    body: GenerateBatchVariantsRequest,
+    supabase: Client = Depends(get_db)
+):
+    """
+    Triggers multiple variant generation jobs for a specific post.
+    If 'platforms' is empty or null, it enqueues jobs for all available SocialPlatforms.
+    """
+    try:
+       
+        target_platforms = body.platforms
+        if not target_platforms:
+            target_platforms = list(SocialPlatform)
 
-# @router.post(
-#     "/posts/{post_id}/regenerate", 
-#     response_model=RegeneratePostResponse, 
-#     status_code=status.HTTP_202_ACCEPTED
-# )
-# async def regenerate_post(
-#     post_id: str,
-#     supabase: Client = Depends(get_db)
-# ):
-#     """
-#     Triggers a re-generation job for an existing post by executing 
-#     the enqueue_regeneration_job RPC in Supabase into 'background_jobs'.
-#     """
-#     try:
-#         response = supabase.rpc(
-#             "enqueue_regeneration_job",
-#             {"p_post_id": post_id}
-#         ).execute()
+        enqueued_results = []
 
-#         msg_id = response.data
+        for platform in target_platforms:
+            
+            response = supabase.rpc(
+                "enqueue_variant_job",
+                {
+                    "p_post_id": body.post_id,
+                    "p_platform": platform.value
+                }
+            ).execute()
 
-#         if msg_id is None:
-#             raise HTTPException(
-#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#                 detail="Failed to enqueue job in PGMQ."
-#             )
+            msg_id = response.data
 
-#         return RegeneratePostResponse(
-#             message="Post successfully enqueued for regeneration.",
-#             msg_id=msg_id,
-#             post_id=post_id
-#         )
+            if msg_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to enqueue variant job for platform '{platform.value}'."
+                )
 
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST,
-#             detail=f"Could not enqueue post: {str(e)}"
-#         )
+            enqueued_results.append(
+                BatchJobResult(platform=platform, msg_id=msg_id)
+            )
+
+        return GenerateBatchVariantsResponse(
+            message=f"Successfully enqueued {len(enqueued_results)} variant generation job(s).",
+            post_id=body.post_id,
+            results=enqueued_results
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not enqueue batch variant jobs: {str(e)}"
+        )
+
+

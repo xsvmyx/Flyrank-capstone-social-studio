@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 from supabase import Client
 from schemas.variant_schemas import GeneratedVariant, VariantResponse, VariantStatus
+from datetime import datetime
 
 
 class VariantRepository:
@@ -93,20 +94,27 @@ class VariantRepository:
 
 
 
+
+
     async def update_status_by_id(
         self, 
         variant_id: str, 
         status: VariantStatus,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
+        scheduled_at: Optional[datetime] = None
     ) -> Optional[VariantResponse]:
         """
-        Updates the status (and optionally error_message) of a single variant by its ID.
+        Updates the status (and optionally error_message, scheduled_at) of a single variant by its ID.
         """
         update_payload = {
             "status": status.value if isinstance(status, VariantStatus) else status
         }
+        
         if error_message is not None:
             update_payload["error_message"] = error_message
+
+        if scheduled_at is not None:
+            update_payload["scheduled_at"] = scheduled_at.isoformat()
 
         response = (
             self.supabase.table(self.table_name)
@@ -119,6 +127,9 @@ class VariantRepository:
             return None
 
         return VariantResponse(**response.data[0])
+
+
+
 
     async def update_status_by_post_id(
         self, 

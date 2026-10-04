@@ -96,10 +96,10 @@ class PublishService:
                 detail=f"Variant with ID {variant_id} not found.",
             )
 
-        if variant.status != VariantStatus.APPROVED:
+        if variant.status != VariantStatus.APPROVED and variant.status != VariantStatus.SCHEDULED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Variant cannot be published because its status is '{variant.status}'. It must be 'approved'."
+                detail=f"Variant cannot be published because its status is '{variant.status}'. It must be 'approved' or 'scheduled'."
             )
 
         publish_data = PublishHistoryCreate(

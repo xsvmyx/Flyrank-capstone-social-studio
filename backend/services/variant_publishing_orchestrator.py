@@ -146,10 +146,10 @@ class VariantPublishingOrchestrator:
                 raise ValueError(f"Variant with ID {variant_id} not found.")
 
             
-            if variant.status != VariantStatus.APPROVED:
+            if variant.status != VariantStatus.APPROVED and variant.status != VariantStatus.SCHEDULED:
                 error_msg = (
                     f"Variant cannot be published because its status is "
-                    f"'{variant.status}'. It must be 'approved'."
+                    f"'{variant.status}'. It must be 'approved' or 'scheduled'."
                 )
                 logger.warning(f"⚠️ {error_msg}")
 

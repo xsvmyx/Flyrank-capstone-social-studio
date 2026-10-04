@@ -30,6 +30,7 @@ class VariantStatus(str, Enum):
     APPROVED = "approved"   
     REJECTED = "rejected"   
     PUBLISHED = "published"
+    SCHEDULED = "scheduled"  
 
 
 class GeneratedVariant(BaseModel):
@@ -79,3 +80,25 @@ class VariantResponse(BaseModel):
 class UpdateStatusRequest(BaseModel):
     status: VariantStatus
     error_message: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+
+
+
+
+class GenerateBatchVariantsRequest(BaseModel):
+    post_id: str = Field(..., description="Raw post id")
+    platforms: Optional[List[SocialPlatform]] = Field(
+        default=None, 
+        description="List of target platforms. If empty or omitted, all platforms will be used."
+    )
+
+
+class BatchJobResult(BaseModel):
+    platform: SocialPlatform
+    msg_id: int
+
+
+class GenerateBatchVariantsResponse(BaseModel):
+    message: str
+    post_id: str
+    results: List[BatchJobResult]
