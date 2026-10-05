@@ -58,6 +58,7 @@ class VariantGenerationOrchestrator:
                 return False, None
             elif status == VariantStatus.PUBLISHED:
                 logger.info(f"⏩ Variant for '{platform}' is already 'published'. Skipping generation.")
+                return False, None
 
             elif status == VariantStatus.REJECTED:
                 logger.info(f"🔄 Previous variant for '{platform}' failed. Retrying with last error: {error_message}")

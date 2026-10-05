@@ -21,36 +21,6 @@ class VariantPublishingOrchestrator:
         self.raw_post_repository = raw_post_repositroy
         self.publish_service = publish_service
 
-    async def fetch_variant(self, variant_id: UUID | str) -> VariantResponse:
-        str_variant_id = str(variant_id)
-
-        variant = await self.variant_repository.get_by_id(str_variant_id)
-
-        if not variant:
-            logger.error(
-                f"❌ Variant with ID {str_variant_id} not found in database."
-            )
-            raise ValueError(
-                f"Variant with ID {str_variant_id} not found."
-            )
-
-        if variant.status != VariantStatus.APPROVED:
-            logger.warning(
-                f"⚠️ Attempt to publish variant {str_variant_id} with invalid status: "
-                f"'{variant.status}'. Required status: 'approved'."
-            )
-            raise ValueError(
-                f"Variant cannot be published because its status is "
-                f"'{variant.status}'. It must be 'approved'."
-            )
-
-        logger.info(
-            f"✅ Variant {str_variant_id} successfully fetched and validated "
-            f"for platform '{variant.platform}'."
-        )
-        return variant
-
-
 
     async def update_variant_state(
         self,
@@ -212,9 +182,11 @@ class VariantPublishingOrchestrator:
                     logger.error(
                         f"⚠️ Failed to update publish history status to 'failed': {db_err}"
                     )
+            
+            raise e
 
 
 
 ##### BETTER ORCHESTRATION , NO POST IF FAILING ....
-##### SEMAPHORES IN AGENTS
-##### 
+#### DELETE USELESS CHECK IF EXISTS
+

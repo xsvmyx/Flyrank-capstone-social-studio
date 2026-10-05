@@ -13,7 +13,7 @@ from storage3.utils import StorageException
 def mock_storage_repo():
     repo = MagicMock(spec=StorageRepository)
     repo.upload_file = AsyncMock()
-    repo.get_signed_url = AsyncMock(return_value="https://storage.example.com/signed/photo.png")
+    repo.get_public_url = MagicMock(return_value="https://storage.example.com/public/photo.png")
     repo.list_files = AsyncMock(return_value=[])
     return repo
 
@@ -40,9 +40,9 @@ async def test_upload_image_success(upload_service, mock_storage_repo):
     file = create_mock_upload_file(filename="avatar.png", content_type="image/png")
     user_id = "user_123"
 
-    signed_url = await upload_service.upload_image(file=file, user_id=user_id)
+    public_url = await upload_service.upload_image(file=file, user_id=user_id)
 
-    assert signed_url == "https://storage.example.com/signed/photo.png"
+    assert public_url == "https://storage.example.com/public/photo.png"
     mock_storage_repo.upload_file.assert_called_once()
     
     call_kwargs = mock_storage_repo.upload_file.call_args[1]
@@ -51,7 +51,7 @@ async def test_upload_image_success(upload_service, mock_storage_repo):
     assert call_kwargs["file_path"].startswith("user_123/")
     assert call_kwargs["file_path"].endswith(".png")
 
-    mock_storage_repo.get_signed_url.assert_called_once()
+    mock_storage_repo.get_public_url.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -117,10 +117,15 @@ async def test_list_user_uploads_success(upload_service, mock_storage_repo):
         {"name": "", "id": "id-4"},
     ]
 
+    mock_storage_repo.get_public_url.side_effect = lambda fp: f"https://storage.example.com/public/{fp}"
+    
     result = await upload_service.list_user_uploads(user_id="user_456")
 
     mock_storage_repo.list_files.assert_called_once_with(folder_path="user_456")
-    assert result == ["user_456/file1.png", "user_456/file2.jpg"]
+    assert result == [
+        "https://storage.example.com/public/user_456/file1.png", 
+        "https://storage.example.com/public/user_456/file2.jpg"
+    ]
 
 
 @pytest.mark.asyncio

@@ -6,19 +6,23 @@ This document provides technical evidence demonstrating that social media post g
 
 ## 1. Constraint Profiles Matrix
 
-Platform constraint rules are implemented in agent classes inheriting from `BaseAgent` (`LinkedInAgent`, `FacebookAgent`, etc.):
+Platform constraint rules are implemented in agent classes inheriting from `BaseAgent` (`LinkedInAgent`, `FacebookAgent`, `DiscordAgent`):
 
-| Constraint Type | LinkedIn Agent Rules | Facebook Agent Rules | Code Implementation |
-| :--- | :--- | :--- | :--- |
-| **Character Length** | Min: 30 \| Max: 3000 | Min: 30 \| Max: 2000 | `MIN_LENGTH`, `MAX_LENGTH` |
-| **Hashtag Count** | Min: 1 \| Max: 10 | Min: 0 \| Max: 5 | `MIN_HASHTAGS`, `MAX_HASHTAGS` |
-| **Forbidden Meta-text** | Blocked | Blocked | `FORBIDDEN_PLACEHOLDERS` |
-| **Wall-of-Text Rule** | > 300 chars requires line breaks | > 300 chars requires line breaks | `len(lines) < 2 if length > 300` |
+| Constraint Type | LinkedIn | Facebook | Discord | Code Implementation |
+| :--- | :--- | :--- | :--- | :--- |
+| **Min Length** | 30 chars | 30 chars | 10 chars | `MIN_LENGTH` |
+| **Max Length** | 3 000 chars | 2 000 chars | 2 000 chars | `MAX_LENGTH` |
+| **Min Hashtags** | 1 | 0 | 0 (social hashtags banned) | `MIN_HASHTAGS` |
+| **Max Hashtags** | 10 | 5 | 4 soft cap (channel refs OK) | `MAX_HASHTAGS` |
+| **Forbidden Meta-text** | Blocked | Blocked | Blocked (regex) | `FORBIDDEN_PLACEHOLDERS` / `FORBIDDEN_PATTERNS` |
+| **Wall-of-Text Rule** | > 300 chars → line breaks required | > 300 chars → line breaks required | > 400 chars → line breaks required | `len(lines) < 2` |
+| **Tone** | Professional / conversational | Warm / community | Casual / Discord Markdown | Prompt guidelines |
 
 ### Forbidden Meta-text & Placeholders
 The deterministic validator scans case-insensitively for AI artifacts and prompt leaks:
-- `"[insert"`, `"[votre nom]"`, `"[lien]"`, `"[link]"`
+- `"[insert"`, `"[your name]"`, `"[lien]"`, `"[link]"`
 - `"as an ai"`, `"here is your post"`
+- Discord uses compiled regex patterns to catch all variants of the above.
 
 ---
 
@@ -43,32 +47,20 @@ uv run pytest tests/unit/test_agent_constraints.py -v
 ```
 
 ### Terminal Output
-```text
-============================= test session starts ==============================
-platform linux -- Python 3.12.3, pytest-9.1.1
+```bash
+~/Desktop/FlyRank/capstone/backend main*
+backend ❯ pytest tests/unit/test_agent_constraints.py
+============================================== test session starts ===============================================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
 rootdir: /home/samy/Desktop/FlyRank/capstone/backend
 configfile: pyproject.toml
-plugins: asyncio-1.4.0, mock-3.15.1
-collected 16 items
+plugins: mock-3.15.1, asyncio-1.4.0, anyio-4.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 16 items                                                                                               
 
-tests/unit/test_agent_constraints.py::test_empty_content_blocked PASSED                          [  6%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_too_short PASSED              [ 12%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_29_chars_boundary PASSED      [ 18%]
-tests/unit/test_agent_constraints.py::test_linkedin_passed_exact_30_chars_boundary PASSED      [ 25%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_too_long PASSED               [ 31%]
-tests/unit/test_agent_constraints.py::test_facebook_blocked_when_exceeds_2000_chars PASSED    [ 37%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_ai_placeholder_present PASSED [ 43%]
-tests/unit/test_agent_constraints.py::test_facebook_blocked_when_bracket_placeholder_present PASSED [ 50%]
-tests/unit/test_agent_constraints.py::test_case_insensitive_forbidden_placeholders PASSED      [ 56%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_no_hashtags PASSED             [ 62%]
-tests/unit/test_agent_constraints.py::test_linkedin_blocked_when_too_many_hashtags PASSED       [ 68%]
-tests/unit/test_agent_constraints.py::test_facebook_blocked_when_too_many_hashtags PASSED       [ 75%]
-tests/unit/test_agent_constraints.py::test_single_paragraph_too_long_blocked PASSED             [ 81%]
-tests/unit/test_agent_constraints.py::test_multiple_simultaneous_violations_accumulated PASSED [ 87%]
-tests/unit/test_agent_constraints.py::test_linkedin_valid_variant_passed PASSED                 [ 93%]
-tests/unit/test_agent_constraints.py::test_facebook_valid_variant_passed PASSED                 [100%]
+tests/unit/test_agent_constraints.py ................                                                      [100%]
 
-============================== 16 passed in 0.12s ==============================
+=============================================== 16 passed in 0.08s ===============================================
 ```
 
 ---
@@ -77,25 +69,154 @@ tests/unit/test_agent_constraints.py::test_facebook_valid_variant_passed PASSED 
 
 ### Command Executed
 ```bash
-cd backend
-uv run pytest
-```
-
-### Summary Output
-```text
+~/Desktop/FlyRank/capstone/backend main*
+backend ❯ pytest
 ============================================== test session starts ===============================================
 platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
 rootdir: /home/samy/Desktop/FlyRank/capstone/backend
 configfile: pyproject.toml
 plugins: mock-3.15.1, asyncio-1.4.0, anyio-4.15.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
-collected 57 items                                                                                               
+collected 76 items                                                                                               
 
-tests/unit/test_agent_constraints.py ................                                                      [ 28%]
-tests/unit/test_llm_service.py ........                                                                    [ 42%]
-tests/unit/test_scraping_service.py .............                                                          [ 64%]
-tests/unit/test_upload_service.py .......                                                                  [ 77%]
-tests/unit/test_variant_generation_orchestrator.py .............                                           [100%]
+tests/unit/test_agent_constraints.py ................                                                      [ 21%]
+tests/unit/test_llm_service.py .....                                                                       [ 27%]
+tests/unit/test_publish_service.py .........                                                               [ 39%]
+tests/unit/test_publishers.py .......                                                                      [ 48%]
+tests/unit/test_scraping_service.py .............                                                          [ 65%]
+tests/unit/test_upload_service.py .......                                                                  [ 75%]
+tests/unit/test_variant_generation_orchestrator.py ...........                                             [ 89%]
+tests/unit/test_variant_publishing_orchestrator.py ........                                                [100%]
 
-=============================================== 57 passed in 0.26s  ===============================================
+=============================================== 76 passed in 1.35s ===============================================
 ```
+
+
+## 5. Adapter Layer Evidence (SocialPublisher Interface)
+
+**Requirement:** "Adapter layer: one SocialPublisher interface, one real free platform, and at least two mock adapters. An adapter swap changes configuration, not business logic."
+
+### Architecture Proof
+Our project uses a `@register_publisher` decorator pattern. The business logic (`PublishService` and `VariantPublishingOrchestrator`) never hardcodes platform logic. They rely on the `SocialPublisher` base interface.
+
+We have:
+- **Base Interface:** `SocialPublisher` (`backend/services/publishers/social_publisher.py`)
+- **Real Platform:** Discord Webhook Adapter (`backend/services/publishers/discord_publisher.py`)
+- **Mock Adapters:** LinkedIn & Facebook (which simulate API calls and return mock IDs).
+
+### Execution Proof (Adapter Swap)
+
+**Command Executed:**
+```bash
+# Single batch call: triggers Discord (real webhook) AND LinkedIn (mock adapter) simultaneously
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST http://localhost:8000/publish/trigger-batch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d", "platforms": ["discord", "linkedin"]}'
+```
+
+**Terminal Output:**
+```json
+{
+  "message": "Batch publish completed: 2/2 job(s) queued.",
+  "post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d",
+  "results": [
+    {
+      "variant_id": "ce0f1dea-63db-4f8f-99b6-bf6af8770e04",
+      "platform": "discord",
+      "status": "queued",
+      "message": "Publication request queued successfully."
+    },
+    {
+      "variant_id": "d4dad170-bb3c-41ae-814f-3d90fc1baf4e",
+      "platform": "linkedin",
+      "status": "queued",
+      "message": "Publication request queued successfully."
+    }
+  ]
+}
+HTTP_STATUS: 202
+```
+> Both adapters (Discord real webhook + LinkedIn mock) were dispatched from the same business logic call. Swapping an adapter requires no change to `PublishService` or `VariantPublishingOrchestrator`.
+
+---
+
+## 6. Idempotent Publish Evidence
+
+**Requirement:** "Idempotent publish: the same variant and slot never post two times, even under retries."
+
+### Architecture Proof
+The `publish_history` table utilizes a `UNIQUE (idempotency_key)` constraint. Furthermore, when `VariantPublishingOrchestrator` processes a job, it strictly checks if the variant's status is already `PUBLISHED` (or if a success record already exists) before attempting the external HTTP request, effectively preventing double posting.
+
+### Execution Proof (Repeated Call Transcript)
+
+**First Attempt** — already executed in Section 5 above (Discord + LinkedIn queued, `HTTP_STATUS: 202`).
+
+**Second Attempt (same post, same platforms):**
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST http://localhost:8000/publish/trigger-batch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d", "platforms": ["discord", "linkedin"]}'
+```
+
+**Terminal Output:**
+```json
+{
+  "detail": {
+    "message": "No jobs were queued. All variants were either already published, unapproved, or missing.",
+    "post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d",
+    "results": [
+      {
+        "variant_id": "ce0f1dea-63db-4f8f-99b6-bf6af8770e04",
+        "platform": "discord",
+        "status": "skipped",
+        "message": "Variant has already been successfully published."
+      },
+      {
+        "variant_id": "d4dad170-bb3c-41ae-814f-3d90fc1baf4e",
+        "platform": "linkedin",
+        "status": "skipped",
+        "message": "Variant has already been successfully published."
+      }
+    ]
+  }
+}
+HTTP_STATUS: 400
+```
+> The second call is immediately rejected. Both variants are flagged `skipped / already published`. The same content can never be sent twice to the same platform.
+
+---
+
+## 7. Review Workflow Evidence
+
+**Requirement:** *"Only approved variants can be scheduled. An unapproved schedule attempt returns a 4xx status code with an error message."*
+
+### Execution Proof (DRAFT variant blocked)
+
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST http://localhost:8000/publish/trigger-batch \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d", "platforms": ["telegram"]}'
+```
+
+**Terminal Output:**
+```json
+{
+  "detail": {
+    "message": "No jobs were queued. All variants were either already published, unapproved, or missing.",
+    "post_id": "de4e6e91-c0c6-4e16-b40d-2fd19347b46d",
+    "results": [
+      {
+        "variant_id": "3a38d63c-dc9e-44a7-a049-dbf05657d436",
+        "platform": "telegram",
+        "status": "skipped",
+        "message": "Variant cannot be published because its status is 'VariantStatus.DRAFT'. It must be 'approved' or 'scheduled'."
+      }
+    ]
+  }
+}
+HTTP_STATUS: 400
+```
+> The Telegram variant has status `DRAFT`. The API immediately rejects the publish attempt with **HTTP 400** and an explicit error message naming the broken rule: the variant must be `approved` or `scheduled`.

@@ -179,6 +179,21 @@ class VariantRepository:
 
 
 
+    async def get_by_post_id_and_platform(
+        self, post_id: str, platform: str
+    ) -> Optional[VariantResponse]:
+        """Retrieves a single variant by its post_id and platform."""
+        response = (
+            self.supabase.table(self.table_name)
+            .select("*")
+            .eq("post_id", post_id)
+            .eq("platform", platform)
+            .execute()
+        )
+        if not response.data:
+            return None
+        return VariantResponse(**response.data[0])
+
     async def get_platform_statuses_by_post_id(
         self, post_id: str
     ) -> Dict[str, Dict[str, str | None]]:

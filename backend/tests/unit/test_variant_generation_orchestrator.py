@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
 from repositories.raw_post_repository import RawPostRepository
 from repositories.variant_repository import VariantRepository
 from schemas.posts_schemas import RawPostResponse
@@ -25,16 +26,15 @@ def mock_raw_post_repo():
 @pytest.fixture
 def mock_llm_service():
     service = MagicMock(spec=LLMService)
-    service.generate_variants = AsyncMock(return_value=[])
-    service.regenerate_variants = AsyncMock(return_value=[])
+    service.generate_variant_for_platform = AsyncMock()
     return service
 
 
 @pytest.fixture
 def mock_variant_repo():
     repo = MagicMock(spec=VariantRepository)
-    repo.get_by_post_id = AsyncMock(return_value=[])
-    repo.create_many = AsyncMock(return_value=[])
+    repo.get_platform_statuses_by_post_id = AsyncMock(return_value={})
+    repo.create_one = AsyncMock()
     return repo
 
 
@@ -56,308 +56,169 @@ def sample_raw_post():
         image_url="https://example.com/ai.jpg",
         user_id="usr_555",
         created_at=datetime.fromisoformat("2026-09-25T12:00:00"),
+        updated_at=datetime.fromisoformat("2026-09-25T12:00:00"),
     )
 
 
 # ==========================================
-# 1. Tests for execute_job & validation
+# 1. Tests for execute_job parameter validation
 # ==========================================
 
 @pytest.mark.asyncio
 async def test_execute_job_missing_post_id(orchestrator):
-    payload = {"user_id": "usr_123"}
-    with pytest.raises(ValueError, match="Payload missing required key 'post_id'"):
+    payload = {"platform": "twitter"}
+    with pytest.raises(ValueError, match="Job payload must contain 'post_id' and 'platform'"):
         await orchestrator.execute_job(payload)
 
 
 @pytest.mark.asyncio
-async def test_execute_job_raw_post_not_found(orchestrator, mock_raw_post_repo):
+async def test_execute_job_missing_platform(orchestrator):
+    payload = {"post_id": "post_123"}
+    with pytest.raises(ValueError, match="Job payload must contain 'post_id' and 'platform'"):
+        await orchestrator.execute_job(payload)
+
+
+# ==========================================
+# 2. Tests for _check_generation_needed
+# ==========================================
+
+@pytest.mark.asyncio
+async def test_check_generation_needed_no_existing(orchestrator):
+    statuses = {}
+    should_gen, err = await orchestrator._check_generation_needed("twitter", statuses)
+    assert should_gen is True
+    assert err is None
+
+
+@pytest.mark.asyncio
+async def test_check_generation_needed_draft(orchestrator):
+    statuses = {"twitter": {"status": VariantStatus.DRAFT, "error_message": None}}
+    should_gen, err = await orchestrator._check_generation_needed("twitter", statuses)
+    assert should_gen is False
+
+
+@pytest.mark.asyncio
+async def test_check_generation_needed_approved(orchestrator):
+    statuses = {"twitter": {"status": VariantStatus.APPROVED, "error_message": None}}
+    should_gen, err = await orchestrator._check_generation_needed("twitter", statuses)
+    assert should_gen is False
+
+
+@pytest.mark.asyncio
+async def test_check_generation_needed_published(orchestrator):
+    statuses = {"twitter": {"status": VariantStatus.PUBLISHED, "error_message": None}}
+    should_gen, err = await orchestrator._check_generation_needed("twitter", statuses)
+    assert should_gen is False
+
+
+@pytest.mark.asyncio
+async def test_check_generation_needed_rejected(orchestrator):
+    statuses = {"twitter": {"status": VariantStatus.REJECTED, "error_message": "Too long"}}
+    should_gen, err = await orchestrator._check_generation_needed("twitter", statuses)
+    assert should_gen is True
+    assert err == "Too long"
+
+
+# ==========================================
+# 3. Tests for execute_job full paths
+# ==========================================
+
+@pytest.mark.asyncio
+async def test_execute_job_skipped_due_to_status(orchestrator, mock_variant_repo):
+    # Setup: Platform already has a draft variant
+    payload = {"post_id": "post_123", "platform": "twitter"}
+    mock_variant_repo.get_platform_statuses_by_post_id.return_value = {
+        "twitter": {"status": VariantStatus.DRAFT, "error_message": None}
+    }
+    
+    result = await orchestrator.execute_job(payload)
+    
+    assert result["status"] == "skipped"
+    assert "already processed/blocked." in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_execute_job_raw_post_not_found(orchestrator, mock_variant_repo, mock_raw_post_repo):
+    payload = {"post_id": "post_404", "platform": "twitter"}
+    mock_variant_repo.get_platform_statuses_by_post_id.return_value = {}
     mock_raw_post_repo.get_by_id.return_value = None
 
     with pytest.raises(ValueError, match="Raw post with ID post_404 does not exist."):
-        await orchestrator.execute_job({"post_id": "post_404"})
+        await orchestrator.execute_job(payload)
 
 
 @pytest.mark.asyncio
-async def test_execute_job_empty_raw_content(orchestrator, mock_raw_post_repo, sample_raw_post):
-    sample_raw_post.raw_content = "   \n  "
-    mock_raw_post_repo.get_by_id.return_value = sample_raw_post
-
-    result = await orchestrator.execute_job({"post_id": "post_123"})
-
-    assert result == {
-        "status": "skipped",
-        "reason": "empty_content",
-        "post_id": "post_123",
-    }
-
-
-# ==========================================
-# 2. Tests for Full Execution Paths (Initial, Regeneration, Skip)
-# ==========================================
-
-@pytest.mark.asyncio
-async def test_execute_job_initial_generation_success(
-    orchestrator, mock_raw_post_repo, mock_llm_service, mock_variant_repo, sample_raw_post
+async def test_execute_job_success(
+    orchestrator, mock_variant_repo, mock_raw_post_repo, mock_llm_service, sample_raw_post
 ):
+    payload = {"post_id": "post_123", "platform": "linkedin"}
+    
+    # 1. Status fetch shows no existing variant
+    mock_variant_repo.get_platform_statuses_by_post_id.return_value = {}
+    
+    # 2. Raw post fetch succeeds
     mock_raw_post_repo.get_by_id.return_value = sample_raw_post
-    mock_variant_repo.get_by_post_id.return_value = []  # Initial run: no existing variants
-
-    generated_variants = [
-        GeneratedVariant(
-            platform=SocialPlatform.TWITTER,
-            content="Tweet about AI revolution!",
-            hashtags=["#AI"],
-        ),
-        GeneratedVariant(
-            platform=SocialPlatform.LINKEDIN,
-            content="In-depth post about AI...",
-            hashtags=["#Tech"],
-        ),
-    ]
-    mock_llm_service.generate_variants.return_value = generated_variants
-
-    persisted_variants = [
-        VariantResponse(
-            id="var_1",
-            post_id="post_123",
-            platform=SocialPlatform.TWITTER,
-            content="Tweet about AI revolution!",
-            status=VariantStatus.DRAFT,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-        VariantResponse(
-            id="var_2",
-            post_id="post_123",
-            platform=SocialPlatform.LINKEDIN,
-            content="In-depth post about AI...",
-            status=VariantStatus.DRAFT,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-    ]
-    mock_variant_repo.create_many.return_value = persisted_variants
-
-    result = await orchestrator.execute_job({"post_id": "post_123"})
-
-    assert result == {
-        "status": "success",
-        "post_id": "post_123",
-        "generated_count": 2,
-    }
-
-    mock_llm_service.generate_variants.assert_called_once_with(
-        source_text="Artificial Intelligence is advancing rapidly..."
-    )
-    mock_variant_repo.create_many.assert_called_once_with(
-        post_id="post_123",
-        variants=generated_variants,
-    )
-
-
-@pytest.mark.asyncio
-async def test_execute_job_targeted_regeneration_for_rejected_variants(
-    orchestrator, mock_raw_post_repo, mock_llm_service, mock_variant_repo, sample_raw_post
-):
-    mock_raw_post_repo.get_by_id.return_value = sample_raw_post
-
-    # DB contains Twitter (REJECTED) and LinkedIn (APPROVED)
-    existing_variants = [
-        VariantResponse(
-            id="v1",
-            post_id="post_123",
-            platform=SocialPlatform.TWITTER,
-            content="Old tweet",
-            status=VariantStatus.REJECTED,
-            error_message="Too long, keep under 280 chars.",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-        VariantResponse(
-            id="v2",
-            post_id="post_123",
-            platform=SocialPlatform.LINKEDIN,
-            content="Approved LinkedIn post",
-            status=VariantStatus.APPROVED,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-    ]
-    mock_variant_repo.get_by_post_id.return_value = existing_variants
-
-    regenerated_variant = GeneratedVariant(
-        platform=SocialPlatform.TWITTER,
-        content="Fixed short tweet",
+    
+    # 3. LLM Generation
+    generated = GeneratedVariant(
+        platform=SocialPlatform.LINKEDIN,
+        content="Professional AI post",
         hashtags=["#AI"],
+        is_valid=True
     )
-    mock_llm_service.regenerate_variants.return_value = [regenerated_variant]
-    mock_variant_repo.create_many.return_value = [
-        VariantResponse(
-            id="v3",
-            post_id="post_123",
-            platform=SocialPlatform.TWITTER,
-            content="Fixed short tweet",
-            status=VariantStatus.DRAFT,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-    ]
-
-    result = await orchestrator.execute_job({"post_id": "post_123"})
-
-    assert result == {
-        "status": "success",
-        "post_id": "post_123",
-        "generated_count": 1,
-    }
-
-    mock_llm_service.regenerate_variants.assert_called_once_with(
+    mock_llm_service.generate_variant_for_platform.return_value = generated
+    
+    # 4. Persistence
+    persisted = VariantResponse(
+        id="var_1",
+        post_id="post_123",
+        platform=SocialPlatform.LINKEDIN,
+        content="Professional AI post",
+        status=VariantStatus.DRAFT,
+        created_at=datetime.now(),
+        updated_at=datetime.now()
+    )
+    mock_variant_repo.create_one.return_value = persisted
+    
+    result = await orchestrator.execute_job(payload)
+    
+    assert result["status"] == "success"
+    assert result["platform"] == "linkedin"
+    assert result["generated_variant"] == persisted
+    
+    mock_llm_service.generate_variant_for_platform.assert_called_once_with(
         source_text="Artificial Intelligence is advancing rapidly...",
-        target_feedbacks={"twitter": "Too long, keep under 280 chars."},
+        platform="linkedin",
+        error_message=None
     )
 
 
 @pytest.mark.asyncio
-async def test_execute_job_draft_only_skipped(
-    orchestrator, mock_raw_post_repo, mock_variant_repo, sample_raw_post
+async def test_execute_job_retry_rejected(
+    orchestrator, mock_variant_repo, mock_raw_post_repo, mock_llm_service, sample_raw_post
 ):
-    mock_raw_post_repo.get_by_id.return_value = sample_raw_post
-    existing_variants = [
-        VariantResponse(
-            id="v1",
-            post_id="post_123",
-            platform=SocialPlatform.TWITTER,
-            status=VariantStatus.DRAFT,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-    ]
-    mock_variant_repo.get_by_post_id.return_value = existing_variants
-
-    result = await orchestrator.execute_job({"post_id": "post_123"})
-
-    assert result == {
-        "status": "skipped",
-        "reason": "nothing_to_generate",
-        "post_id": "post_123",
+    payload = {"post_id": "post_123", "platform": "twitter"}
+    
+    # 1. Indicates rejected variant exists
+    mock_variant_repo.get_platform_statuses_by_post_id.return_value = {
+        "twitter": {"status": VariantStatus.REJECTED, "error_message": "Character limit exceeded"}
     }
-
-
-@pytest.mark.asyncio
-async def test_execute_job_approved_only_skipped(
-    orchestrator, mock_raw_post_repo, mock_variant_repo, sample_raw_post
-):
+    
     mock_raw_post_repo.get_by_id.return_value = sample_raw_post
-    existing_variants = [
-        VariantResponse(
-            id="v1",
-            post_id="post_123",
-            platform=SocialPlatform.TWITTER,
-            status=VariantStatus.APPROVED,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-    ]
-    mock_variant_repo.get_by_post_id.return_value = existing_variants
-
-    result = await orchestrator.execute_job({"post_id": "post_123"})
-
-    assert result == {
-        "status": "skipped",
-        "reason": "nothing_to_generate",
-        "post_id": "post_123",
-    }
-
-
-@pytest.mark.asyncio
-async def test_execute_job_fatal_error(orchestrator, mock_raw_post_repo):
-    mock_raw_post_repo.get_by_id.side_effect = RuntimeError("Database connection lost")
-
-    with pytest.raises(RuntimeError, match="Database connection lost"):
-        await orchestrator.execute_job({"post_id": "post_123"})
-
-
-# ==========================================
-# 3. Tests for _get_categorized_platforms
-# ==========================================
-
-@pytest.mark.asyncio
-async def test_get_categorized_platforms_empty(orchestrator, mock_variant_repo):
-    mock_variant_repo.get_by_post_id.return_value = []
-
-    approved, rejected, draft = await orchestrator._get_categorized_platforms("post_123")
-
-    assert approved == {}
-    assert rejected == {}
-    assert draft == {}
-
-
-@pytest.mark.asyncio
-async def test_get_categorized_platforms_mixed(orchestrator, mock_variant_repo):
-    variants = [
-        VariantResponse(
-            id="v1",
-            post_id="p1",
-            platform=SocialPlatform.LINKEDIN,
-            status=VariantStatus.APPROVED,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-        VariantResponse(
-            id="v2",
-            post_id="p1",
-            platform=SocialPlatform.TWITTER,
-            status=VariantStatus.REJECTED,
-            error_message="Too long",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-        VariantResponse(
-            id="v3",
-            post_id="p1",
-            platform=SocialPlatform.INSTAGRAM,
-            status=VariantStatus.DRAFT,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        ),
-    ]
-    mock_variant_repo.get_by_post_id.return_value = variants
-
-    approved, rejected, draft = await orchestrator._get_categorized_platforms("p1")
-
-    assert approved == {"linkedin": None}
-    assert rejected == {"twitter": "Too long"}
-    assert draft == {"instagram": None}
-
-
-# ==========================================
-# 4. Tests for _generate_text_variants & _persist_results
-# ==========================================
-
-@pytest.mark.asyncio
-async def test_generate_text_variants_pipeline_exception(orchestrator, mock_llm_service):
-    mock_llm_service.generate_variants.side_effect = Exception("LLM crash")
-
-    # Should catch exception internally and return empty list []
-    result = await orchestrator._generate_text_variants("Source text")
-
-    assert result == []
-
-
-@pytest.mark.asyncio
-async def test_persist_results_empty(orchestrator, mock_variant_repo):
-    results = await orchestrator._persist_results("post_123", [])
-
-    assert results == []
-    mock_variant_repo.create_many.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_persist_results_database_error(orchestrator, mock_variant_repo):
-    mock_variant_repo.create_many.side_effect = RuntimeError("DB write error")
-
-    variant = GeneratedVariant(platform=SocialPlatform.TWITTER, content="Text")
-
-    with pytest.raises(RuntimeError, match="DB write error"):
-        await orchestrator._persist_results("post_123", [variant])
+    
+    generated = GeneratedVariant(
+        platform=SocialPlatform.TWITTER,
+        content="Shortened tweet",
+        is_valid=True
+    )
+    mock_llm_service.generate_variant_for_platform.return_value = generated
+    mock_variant_repo.create_one.return_value = MagicMock()
+    
+    await orchestrator.execute_job(payload)
+    
+    # ensure generate_variant_for_platform got the error message
+    mock_llm_service.generate_variant_for_platform.assert_called_once_with(
+        source_text="Artificial Intelligence is advancing rapidly...",
+        platform="twitter",
+        error_message="Character limit exceeded"
+    )

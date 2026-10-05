@@ -65,85 +65,33 @@ def test_llm_service_initialization(mock_agent_twitter, mock_agent_linkedin):
 
 
 # ==========================================
-# 2. Tests for generate_variants
+# 2. Tests for generate_variant_for_platform
 # ==========================================
 
 @pytest.mark.asyncio
-async def test_generate_variants_no_agents(llm_service):
+async def test_generate_variant_for_platform_no_agents(llm_service):
     llm_service._agents = []
-    results = await llm_service.generate_variants("Source text for article")
-    assert results == []
+    result = await llm_service.generate_variant_for_platform("Source text", SocialPlatform.TWITTER)
+    assert result is None
 
 
 @pytest.mark.asyncio
-async def test_generate_variants_success(llm_service, mock_agent_twitter, mock_agent_linkedin):
-    results = await llm_service.generate_variants("AI is transforming software engineering.")
-
-    assert len(results) == 2
-    mock_agent_twitter.generate_variant.assert_called_once_with("AI is transforming software engineering.")
-    mock_agent_linkedin.generate_variant.assert_called_once_with("AI is transforming software engineering.")
-    
-    platforms = [r.platform for r in results]
-    assert SocialPlatform.TWITTER in platforms
-    assert SocialPlatform.LINKEDIN in platforms
+async def test_generate_variant_for_platform_success(llm_service, mock_agent_twitter):
+    result = await llm_service.generate_variant_for_platform("AI text", SocialPlatform.TWITTER, "")
+    assert result is not None
+    assert result.platform == SocialPlatform.TWITTER
+    mock_agent_twitter.generate_variant.assert_called_once_with("AI text", "")
 
 
 @pytest.mark.asyncio
-async def test_generate_variants_with_one_failing_agent(llm_service, mock_agent_twitter, mock_agent_linkedin):
-    mock_agent_twitter.generate_variant.side_effect = RuntimeError("Groq Rate Limit Exceeded")
-
-    results = await llm_service.generate_variants("Source content")
-
-    # Should not crash, and should return the valid LinkedIn variant
-    assert len(results) == 1
-    assert results[0].platform == SocialPlatform.LINKEDIN
-    assert results[0].content == "LinkedIn professional post content..."
-
-
-# ==========================================
-# 3. Tests for regenerate_variants
-# ==========================================
-
-@pytest.mark.asyncio
-async def test_regenerate_variants_no_agents(llm_service):
-    llm_service._agents = []
-    results = await llm_service.regenerate_variants("Source text", {"twitter": "Too long"})
-    assert results == []
+async def test_generate_variant_for_platform_unsupported(llm_service):
+    with pytest.raises(ValueError, match="Unsupported platform agent"):
+        await llm_service.generate_variant_for_platform("Text", SocialPlatform.FACEBOOK)
 
 
 @pytest.mark.asyncio
-async def test_regenerate_variants_no_matching_targets(llm_service, mock_agent_twitter, mock_agent_linkedin):
-    # Registered agents are twitter and linkedin, but target is facebook
-    results = await llm_service.regenerate_variants("Source text", {"facebook": "Add more emojis"})
+async def test_generate_variant_for_platform_failing_agent(llm_service, mock_agent_twitter):
+    mock_agent_twitter.generate_variant.side_effect = RuntimeError("API down")
+    with pytest.raises(RuntimeError, match="API down"):
+        await llm_service.generate_variant_for_platform("Text", SocialPlatform.TWITTER, "")
 
-    assert results == []
-    mock_agent_twitter.regenerate_variant.assert_not_called()
-    mock_agent_linkedin.regenerate_variant.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_regenerate_variants_targeted(llm_service, mock_agent_twitter, mock_agent_linkedin):
-    # Only target twitter (case insensitive check: 'TWITTER')
-    target_feedbacks = {
-        "TWITTER": "Please remove tone, keep under 280 chars.",
-    }
-
-    results = await llm_service.regenerate_variants("Source text", target_feedbacks)
-
-    assert len(results) == 1
-    assert results[0].platform == SocialPlatform.TWITTER
-    
-    mock_agent_twitter.regenerate_variant.assert_called_once_with(
-        source_text="Source text",
-        error_message="Please remove tone, keep under 280 chars.",
-    )
-    mock_agent_linkedin.regenerate_variant.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_regenerate_variants_with_failing_agent(llm_service, mock_agent_twitter):
-    mock_agent_twitter.regenerate_variant.side_effect = Exception("API Connection lost")
-
-    results = await llm_service.regenerate_variants("Source text", {"twitter": "Fix hashtags"})
-
-    assert results == []

@@ -17,7 +17,7 @@ class FacebookAgent(BaseAgent):
     MAX_HASHTAGS = 5
     FORBIDDEN_PLACEHOLDERS = [
         "[insert",
-        "[votre nom]",
+        "[your name]",
         "[lien]",
         "[link]",
         "here is your post",

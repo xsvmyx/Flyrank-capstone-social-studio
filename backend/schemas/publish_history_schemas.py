@@ -1,8 +1,10 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from schemas.variant_schemas import SocialPlatform
+
 
 class VariantPublishStatus(str, Enum):
     SUCCESS = "success"            
@@ -12,6 +14,27 @@ class VariantPublishStatus(str, Enum):
 
 class VariantPublishTriggerRequest(BaseModel):
     variant_id: UUID
+
+
+class BatchPublishTriggerRequest(BaseModel):
+    post_id: str = Field(..., description="Raw post id")
+    platforms: Optional[List[SocialPlatform]] = Field(
+        default=None,
+        description="List of target platforms. If empty or omitted, all platforms will be used."
+    )
+
+
+class BatchPublishJobResult(BaseModel):
+    variant_id: str
+    platform: SocialPlatform
+    status: str
+    message: str
+
+
+class BatchPublishTriggerResponse(BaseModel):
+    message: str
+    post_id: str
+    results: List[BatchPublishJobResult]
 
 
 class PublishHistoryBase(BaseModel):
@@ -40,8 +63,4 @@ class PublishHistoryResponse(PublishHistoryBase):
     executed_at: datetime
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
-
-
+    model_config = ConfigDict(from_attributes=True)

@@ -16,7 +16,7 @@ class LinkedInAgent(BaseAgent):
     MAX_HASHTAGS = 10
     FORBIDDEN_PLACEHOLDERS = [
         "[insert",
-        "[votre nom]",
+        "[your name]",
         "[lien]",
         "[link]",
         "here is your post",
