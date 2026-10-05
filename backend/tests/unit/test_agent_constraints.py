@@ -100,7 +100,7 @@ def test_facebook_blocked_when_bracket_placeholder_present(facebook_agent):
 def test_case_insensitive_forbidden_placeholders(linkedin_agent):
     bad_variants = [
         "HERE IS YOUR POST for today's announcement. #News",
-        "Bonjour [VOTRE NOM], voici votre article. #Marketing",
+        "Hello [YOUR NAME],this it your article. #Marketing",
         "AS AN AI language model, I recommend this. #AI",
     ]
 
