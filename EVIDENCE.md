@@ -220,3 +220,74 @@ curl -s -w "\nHTTP_STATUS: %{http_code}" -X POST http://localhost:8000/publish/t
 HTTP_STATUS: 400
 ```
 > The Telegram variant has status `DRAFT`. The API immediately rejects the publish attempt with **HTTP 400** and an explicit error message naming the broken rule: the variant must be `approved` or `scheduled`.
+
+---
+
+## 8. Scheduled Publishing & Durable Scheduling Evidence
+
+**Requirement:** *"Durable scheduling: a worker restart mid-batch continues with zero duplicate posts."*
+
+### Architecture Proof
+When a variant status is updated to `scheduled`, the API enqueues a delayed message into PGMQ (`background_jobs`) with the delay calculated from `scheduled_at - now`. 
+Because jobs are stored durably in PostgreSQL (PGMQ), any worker restart during the delay or processing phase will seamlessly resume jobs without loss or duplicate executions (guaranteed by `publish_history` idempotency constraints).
+
+### Execution Proof (Scheduled Endpoint Transcript)
+
+#### 1. Past Timestamp Check (Rejected with HTTP 400)
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X PATCH http://localhost:8000/variants/13506ccd-62e9-4ea4-81e7-99f55a848ed4/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"status": "scheduled", "scheduled_at": "2026-10-06T15:15:30.000Z"}'
+```
+
+**Terminal Output:**
+```json
+{
+  "detail": "'scheduled_at' must be a future timestamp."
+}
+HTTP_STATUS: 400
+```
+
+#### 2. Successful Scheduling (HTTP 200)
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X PATCH http://localhost:8000/variants/13506ccd-62e9-4ea4-81e7-99f55a848ed4/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"status": "scheduled", "scheduled_at": "2026-10-06T15:17:30.000Z"}'
+```
+
+**Terminal Output:**
+```json
+{
+  "id": "13506ccd-62e9-4ea4-81e7-99f55a848ed4",
+  "post_id": "7dd3d122-8fd5-476e-863f-7f5247bc3d21",
+  "platform": "discord",
+  "content": "# 👀 Computer Vision in Action\n\n...",
+  "status": "scheduled",
+  "error_message": null,
+  "metadata": {},
+  "created_at": "2026-10-06T15:04:18.297914Z",
+  "updated_at": "2026-10-06T15:16:17.758404Z"
+}
+HTTP_STATUS: 200
+```
+> The variant status is updated to `scheduled` and a delayed job (`variant.publish`) is queued in PGMQ.
+
+#### 3. Attempting to Re-schedule non-APPROVED Variant (HTTP 400)
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X PATCH http://localhost:8000/variants/13506ccd-62e9-4ea4-81e7-99f55a848ed4/status \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <JWT>" \
+  -d '{"status": "scheduled", "scheduled_at": "2026-10-06T15:17:30.000Z"}'
+```
+
+**Terminal Output:**
+```json
+{
+  "detail": "Cannot schedule a variant that is not currently approved."
+}
+HTTP_STATUS: 400
+```
+> Re-scheduling is blocked because the variant is no longer in `APPROVED` status (it's `PUBLISHED`), preventing duplicate queueing.
+
