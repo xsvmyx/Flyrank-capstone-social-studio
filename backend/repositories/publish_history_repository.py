@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import UUID
 from supabase import Client
 
@@ -31,7 +31,8 @@ class PublishHistoryRepository:
         if not response.data:
             raise ValueError("Failed to insert publish history record into database.")
 
-        return PublishHistoryResponse(**response.data[0])
+        record = cast(Dict[str, Any], response.data[0])
+        return PublishHistoryResponse(**record)
 
     async def get_by_id(self, history_id: str | UUID) -> Optional[PublishHistoryResponse]:
         response = (
@@ -42,7 +43,8 @@ class PublishHistoryRepository:
         )
         if not response.data:
             return None
-        return PublishHistoryResponse(**response.data[0])
+        record = cast(Dict[str, Any], response.data[0])
+        return PublishHistoryResponse(**record)
 
     async def get_by_idempotency_key(
         self, idempotency_key: str
@@ -55,7 +57,8 @@ class PublishHistoryRepository:
         )
         if not response.data:
             return None
-        return PublishHistoryResponse(**response.data[0])
+        record = cast(Dict[str, Any], response.data[0])
+        return PublishHistoryResponse(**record)
 
     async def get_by_variant_id(
         self, variant_id: str | UUID
@@ -67,7 +70,25 @@ class PublishHistoryRepository:
             .order("created_at", desc=True)
             .execute()
         )
-        return [PublishHistoryResponse(**item) for item in (response.data or [])]
+        return [
+            PublishHistoryResponse(**cast(Dict[str, Any], item))
+            for item in (response.data or [])
+        ]
+
+    async def get_all(
+        self, limit: int = 50, offset: int = 0
+    ) -> List[PublishHistoryResponse]:
+        response = (
+            self.supabase.table(self.table_name)
+            .select("*")
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+        return [
+            PublishHistoryResponse(**cast(Dict[str, Any], item))
+            for item in (response.data or [])
+        ]
 
     async def update(
         self, history_id: str | UUID, update_data: PublishHistoryUpdate
@@ -91,7 +112,8 @@ class PublishHistoryRepository:
         if not response.data:
             raise ValueError(f"Failed to update publish history record: {history_id}")
 
-        return PublishHistoryResponse(**response.data[0])
+        record = cast(Dict[str, Any], response.data[0])
+        return PublishHistoryResponse(**record)
 
     async def delete_by_variant_id(self, variant_id: str | UUID) -> List[PublishHistoryResponse]:
         """
@@ -105,4 +127,7 @@ class PublishHistoryRepository:
             .execute()
         )
 
-        return [PublishHistoryResponse(**item) for item in (response.data or [])]
+        return [
+            PublishHistoryResponse(**cast(Dict[str, Any], item))
+            for item in (response.data or [])
+        ]

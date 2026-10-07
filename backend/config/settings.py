@@ -37,7 +37,7 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 groq_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY"))
 
 
-
+#unused for now
 SOCIAL_DIMENSIONS = {
     "instagram": (1080, 1080), 
     "linkedin": (1200, 627),    
@@ -46,5 +46,3 @@ SOCIAL_DIMENSIONS = {
 }
 
 DISCORD_WEBHOOK = os.getenv('DISCORD_WEBHOOK')
-
-

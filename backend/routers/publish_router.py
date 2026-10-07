@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.dependencies import (
     get_publishing_repository,
@@ -12,6 +14,7 @@ from schemas.publish_history_schemas import (
     BatchPublishJobResult,
     BatchPublishTriggerRequest,
     BatchPublishTriggerResponse,
+    PublishHistoryResponse,
     VariantPublishTriggerRequest,
 )
 from schemas.variant_schemas import SocialPlatform
@@ -156,4 +159,47 @@ async def trigger_batch_publication(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process batch publication request: {str(e)}",
+        )
+
+
+@router.get("/history/{variant_id}", response_model=List[PublishHistoryResponse])
+async def get_publish_history_by_variant(
+    variant_id: str,
+    current_user: dict = Depends(validate_token),
+    publish_history_repo: PublishHistoryRepository = Depends(
+        get_publishing_repository
+    ),
+):
+    """
+    Retrieves all publish attempts for a specific variant.
+    """
+    try:
+        return await publish_history_repo.get_by_variant_id(variant_id)
+    except Exception as e:
+        logger.error(f"Error fetching publish history for variant {variant_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch publish history: {str(e)}",
+        )
+
+
+@router.get("/history", response_model=List[PublishHistoryResponse])
+async def get_all_publish_history(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: dict = Depends(validate_token),
+    publish_history_repo: PublishHistoryRepository = Depends(
+        get_publishing_repository
+    ),
+):
+    """
+    Retrieves a paginated list of all publish attempts.
+    """
+    try:
+        return await publish_history_repo.get_all(limit=limit, offset=offset)
+    except Exception as e:
+        logger.error(f"Error fetching all publish history: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch publish history: {str(e)}",
         )

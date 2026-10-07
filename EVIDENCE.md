@@ -291,3 +291,47 @@ HTTP_STATUS: 400
 ```
 > Re-scheduling is blocked because the variant is no longer in `APPROVED` status (it's `PUBLISHED`), preventing duplicate queueing.
 
+---
+
+## 9. Publish History Visibility Evidence
+
+**Requirement:** *"Publish history: each attempt is recorded and visible, with its result."*
+
+### Architecture Proof
+Every publish attempt (whether immediate or via scheduled background job) creates or updates a record in the `publish_history` table:
+- Includes `idempotency_key`, `status` (`pending`, `success`, `failed`), external `response_payload`, `error_message`, `attempt_count`, and `executed_at`.
+- Accessible via endpoints `GET /publish/history/{variant_id}` and `GET /publish/history` (with `limit` and `offset` pagination).
+
+### Execution Proof (Querying History Endpoint)
+
+**Command:**
+```bash
+curl -s -w "\nHTTP_STATUS: %{http_code}" -X GET http://localhost:8000/publish/history/ce0f1dea-63db-4f8f-99b6-bf6af8770e04 \
+  -H "Authorization: Bearer <JWT>"
+```
+
+**Terminal Output:**
+```json
+[
+  {
+    "id": "6d3a8227-7751-4f18-a647-8cfb62e49c71",
+    "variant_id": "ce0f1dea-63db-4f8f-99b6-bf6af8770e04",
+    "idempotency_key": "ce0f1dea-63db-4f8f-99b6-bf6af8770e04_2026-10-06T15:15:00.000000Z",
+    "status": "success",
+    "response_payload": {
+      "platform": "discord",
+      "success": true,
+      "status_code": 204,
+      "external_post_id": "webhook-delivered"
+    },
+    "error_message": null,
+    "attempt_count": 1,
+    "executed_at": "2026-10-06T15:15:02.128451Z",
+    "created_at": "2026-10-06T15:15:01.810232Z"
+  }
+]
+HTTP_STATUS: 200
+```
+> Every attempt is durably recorded in database and directly visible through the API along with status, payload, and timestamps.
+
+
